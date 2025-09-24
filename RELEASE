@@ -37,4 +37,7 @@ fi
 
 new_version="${today}.${new_build}"
 printf '%s\n' "$new_version" > "$VERSION_FILE"
+git add "$VERSION_FILE"
+git commit -m "Release v${new_version}"
+git tag -a "v${new_version}" -m "Release v${new_version}"
 echo "$new_version"
