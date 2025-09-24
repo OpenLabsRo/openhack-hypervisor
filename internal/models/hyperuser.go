@@ -4,14 +4,15 @@ import (
 	"errors"
 	"hypervisor/internal/db"
 	"hypervisor/internal/env"
+	"hypervisor/internal/errmsg"
 	"hypervisor/internal/utils"
-	"net/http"
 	"strings"
 	"time"
 
 	sj "github.com/brianvoe/sjwt"
 	"github.com/gofiber/fiber/v3"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type HyperUser struct {
@@ -21,7 +22,7 @@ type HyperUser struct {
 
 func (hu *HyperUser) GenToken() string {
 	claims, _ := sj.ToClaims(hu)
-	claims.SetExpiresAt(time.Now().Add(365 * 24 * time.Hour))
+	claims.SetExpiresAt(time.Now().Add(time.Hour))
 
 	token := claims.Generate(env.JWT_SECRET)
 	return token
@@ -29,78 +30,71 @@ func (hu *HyperUser) GenToken() string {
 
 func (hu *HyperUser) ParseToken(token string) error {
 	hasVerified := sj.Verify(token, env.JWT_SECRET)
-
 	if !hasVerified {
-		return nil
+		return errors.New("invalid token")
 	}
 
-	claims, _ := sj.Parse(token)
-	err := claims.Validate()
-	claims.ToStruct(&hu)
-
-	return err
-}
-
-func AccountMiddleware(c fiber.Ctx) error {
-	var token string
-
-	authHeader := c.Get("Authorization")
-
-	if string(authHeader) != "" &&
-		strings.HasPrefix(string(authHeader), "Bearer") {
-
-		tokens := strings.Fields(string(authHeader))
-		if len(tokens) == 2 {
-			token = tokens[1]
-		}
-
-		if token == "" {
-			return utils.Error(
-				c,
-				http.StatusUnauthorized,
-				errors.New("unauthorized"),
-			)
-		}
-
-		var hyperuser HyperUser
-		err := hyperuser.ParseToken(token)
-		if err != nil {
-			return errors.New("unauthorized")
-		}
-
-		if hyperuser.Username == "" {
-			return utils.Error(
-				c,
-				http.StatusUnauthorized,
-				errors.New("unauthorized"),
-			)
-		}
-
-		utils.SetLocals(c, "hyperuser", hyperuser)
-	}
-
-	if token == "" {
-		return utils.Error(
-			c,
-			http.StatusUnauthorized,
-			errors.New("unauthorized"),
-		)
-	}
-
-	return c.Next()
-}
-
-func (hu *HyperUser) Get(username string) (err error) {
-	err = db.HyperUsers.FindOne(db.Ctx, bson.M{
-		"username": username,
-	}).Decode(&hu)
+	claims, err := sj.Parse(token)
 	if err != nil {
 		return err
 	}
 
-	if hu.Password == "" {
-		return errors.New("hyperuser does not exist")
+	if err := claims.Validate(); err != nil {
+		return err
 	}
 
-	return
+	claims.ToStruct(hu)
+
+	if strings.TrimSpace(hu.Username) == "" {
+		return errors.New("invalid token")
+	}
+
+	return nil
+}
+
+func AccountMiddleware(c fiber.Ctx) error {
+	authHeader := strings.TrimSpace(c.Get("Authorization"))
+	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+		return utils.StatusError(c, errmsg.HyperUserNoToken)
+	}
+
+	tokens := strings.Fields(authHeader)
+	if len(tokens) != 2 {
+		return utils.StatusError(c, errmsg.HyperUserNoToken)
+	}
+
+	token := strings.TrimSpace(tokens[1])
+	if token == "" {
+		return utils.StatusError(c, errmsg.HyperUserNoToken)
+	}
+
+	var hyperuser HyperUser
+	if err := hyperuser.ParseToken(token); err != nil {
+		return utils.StatusError(c, errmsg.HyperUserNoToken)
+	}
+
+	utils.SetLocals(c, "hyperuser", hyperuser)
+
+	return c.Next()
+}
+
+func (hu *HyperUser) Get(username string) (serr errmsg.StatusError) {
+	serr = errmsg.EmptyStatusError
+
+	err := db.HyperUsers.FindOne(db.Ctx, bson.M{
+		"username": username,
+	}).Decode(hu)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return errmsg.HyperUserNotExists
+		}
+
+		return errmsg.InternalServerError(err)
+	}
+
+	if strings.TrimSpace(hu.Password) == "" {
+		return errmsg.HyperUserNotExists
+	}
+
+	return serr
 }

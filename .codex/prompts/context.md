@@ -1,0 +1,5 @@
+- Read AGENTS.md, to make a general idea
+- Scan the entire repository tree to understand project scope and structure.
+- Review top-level documentation, config files, and entry points to capture architecture, important modules, and build/test workflows.
+- Summarize key components, data models, services, and any notable conventions or tooling used.
+- Do not modify files; only gather context and report findings back to the user.

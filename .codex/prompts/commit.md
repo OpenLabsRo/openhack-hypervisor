@@ -1,0 +1,6 @@
+- Run `git status --short` to verify there are staged or unstaged changes; abort with a clear note if the tree is clean.
+- Stage every intended file using `git add -A`, then re-check `git status --short` to confirm nothing remains unstaged.
+- Inspect the resulting diff (`git diff --cached --stat` and, when helpful, targeted `git diff --cached <path>`) so the commit message accurately reflects every change.
+- Craft a concise 50-character subject line that summarises the overall change, followed by a descriptive body enumerating the touched areas/files (one bullet per file or logical chunk).
+- Write the commit message to a temporary file and commit with `git commit -F <file>`; surface any commit error immediately and stop.
+- After a successful commit, display `git status --short` to confirm a clean tree and report the commit hash + subject back to the user.

@@ -1,0 +1,8 @@
+- Inspect existing `api_spec.yaml`; keep any accurate sections but refresh anything that is stale or incomplete.
+- Traverse every registered route, its handler(s), and any helper calls they invoke so that all success and failure paths are accounted for.
+- Follow StatusError construction (and any direct Fiber status writes) through the call stack to capture every distinct HTTP status code and message an endpoint can emit; document each as an explicit OpenAPI response.
+- When multiple errors share a status code, model them using separate named responses or documented examples so every message appears in the spec.
+- Base the contract solely on facts available within this repository—do not invent defaults or rely on undocumented behaviour.
+- Produce a full OpenAPI 3.x YAML document covering paths, parameters, request/response schemas, security, and shared components.
+- Write the updated specification to `api_spec.yaml` at the repository root, overwriting the previous version.
+- Copy this `api_spec.yaml` file into the openhack-participants folder.

@@ -11,11 +11,16 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var Ctx = context.Background()
-var RDB *redis.Client
-var Client *mongo.Client
+var (
+	Ctx    = context.Background()
+	RDB    *redis.Client
+	Client *mongo.Client
 
-var HyperUsers *mongo.Collection
+	HyperUsers *mongo.Collection
+	Events     *mongo.Collection
+)
+
+const databaseName = "hypervisor"
 
 func InitDB() error {
 	var err error
@@ -34,14 +39,11 @@ func InitDB() error {
 		return err
 	}
 
-	// loading collections
-	HyperUsers = GetCollection("hypervisor", "hyperusers", Client)
+	db := Client.Database(databaseName)
+	HyperUsers = db.Collection("hyperusers")
+	Events = db.Collection("events")
 
 	return nil
-}
-
-func GetCollection(database string, collectionName string, client *mongo.Client) *mongo.Collection {
-	return client.Database(database).Collection(collectionName)
 }
 
 func InitCache() error {

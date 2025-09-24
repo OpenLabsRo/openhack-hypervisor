@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VERSION_FILE="${1:-VERSION}"
+
+if [[ ! -f "$VERSION_FILE" ]]; then
+  echo "Version file not found: $VERSION_FILE" >&2
+  exit 1
+fi
+
+current=$(tr -d '\r\n' < "$VERSION_FILE")
+if [[ -z "$current" ]]; then
+  new_version="$(date +%y.%m.%d).1"
+  printf '%s\n' "$new_version" > "$VERSION_FILE"
+  echo "$new_version"
+  exit 0
+fi
+
+if [[ ! $current =~ ^([0-9]{2})\.?([0-9]{2})\.?([0-9]{2})\.([0-9]+)$ ]]; then
+  echo "Unexpected version format: $current" >&2
+  exit 1
+fi
+
+yy="${BASH_REMATCH[1]}"
+mm="${BASH_REMATCH[2]}"
+dd="${BASH_REMATCH[3]}"
+build="${BASH_REMATCH[4]}"
+
+current_date_part="${yy}.${mm}.${dd}"
+today="$(date +%y.%m.%d)"
+
+if [[ "$current_date_part" == "$today" ]]; then
+  new_build=$((10#$build + 1))
+else
+  new_build=1
+fi
+
+new_version="${today}.${new_build}"
+printf '%s\n' "$new_version" > "$VERSION_FILE"
+echo "$new_version"

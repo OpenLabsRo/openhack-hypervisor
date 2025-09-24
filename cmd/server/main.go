@@ -1,33 +1,52 @@
 package main
 
 import (
-	"hypervisor/internal/db"
-	"hypervisor/internal/hyperusers"
+	"flag"
+	"fmt"
 	"log"
+	"os"
+	"strings"
+
+	"hypervisor/internal"
+	"hypervisor/internal/env"
 
 	"github.com/gofiber/fiber/v3"
 )
 
 func main() {
-	app := fiber.New()
+	deployment := flag.String("deployment", "", "deployment profile (dev|test|prod)")
+	portFlag := flag.String("port", "", "port to listen on")
+	envRoot := flag.String("env-root", "", "directory containing environment files")
+	appVersion := flag.String("app-version", "", "application version override")
 
-	err := db.InitCache()
-	if err != nil {
-		log.Fatal(err)
+	flag.Parse()
+
+	deploy := strings.TrimSpace(*deployment)
+	if deploy == "" {
+		args := flag.Args()
+		if len(args) == 0 {
+			fmt.Println("Usage: server --deployment <type> --port <port> [--env-root <dir>] [--app-version <version>]")
+			os.Exit(1)
+		}
+		deploy = strings.TrimSpace(args[0])
 	}
 
-	err = db.InitDB()
-	if err != nil {
-		log.Fatal(err)
+	if deploy == "" {
+		log.Fatal("deployment is required")
 	}
 
-	hypervisor := app.Group("/hypervisor")
+	port := strings.TrimSpace(*portFlag)
+	if port == "" {
+		log.Fatal("port is required")
+	}
 
-	hypervisor.Get("/ping", func(c fiber.Ctx) error {
-		return c.SendString("PONG")
-	})
+	app := internal.SetupApp(deploy, *envRoot, *appVersion)
 
-	hyperusers.Routes(hypervisor)
+	fmt.Println("APP VERSION:", env.VERSION)
 
-	app.Listen(":8080")
+	if err := app.Listen(fmt.Sprintf(":%s", port), fiber.ListenConfig{
+		EnablePrefork: env.PREFORK,
+	}); err != nil {
+		log.Fatalf("Error listening on port %s: %v", port, err)
+	}
 }
