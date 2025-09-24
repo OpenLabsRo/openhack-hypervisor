@@ -8,6 +8,7 @@ import (
 
 const (
 	ActorHyperUser = "hyperuser"
+	ActorSystem    = "system"
 )
 
 const (
