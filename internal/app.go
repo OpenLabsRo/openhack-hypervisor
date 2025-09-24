@@ -4,6 +4,7 @@ import (
 	"hypervisor/internal/db"
 	"hypervisor/internal/env"
 	"hypervisor/internal/events"
+	"hypervisor/internal/githubhooks"
 	"hypervisor/internal/hyperusers"
 	"log"
 	"strings"
@@ -16,7 +17,9 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 
 	env.Init(envRoot, appVersion)
 
-	if err := db.InitDB(); err != nil {
+	deploy := strings.TrimSpace(deployment)
+
+	if err := db.InitDB(deploy); err != nil {
 		log.Fatal("Could not connect to MongoDB")
 		return nil
 	}
@@ -26,8 +29,11 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 		return nil
 	}
 
-	deploy := strings.TrimSpace(deployment)
-	events.Em = events.NewEmitter(db.Events, deploy)
+	if db.Events != nil {
+		events.Em = events.NewEmitter(db.Events, deploy)
+	} else {
+		events.Em = nil
+	}
 
 	hypervisor := app.Group("/hypervisor")
 
@@ -36,6 +42,7 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	})
 
 	hyperusers.Routes(hypervisor)
+	githubhooks.Routes(hypervisor)
 
 	return app
 }

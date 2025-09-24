@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"log"
+	"strings"
 
 	"hypervisor/internal/env"
 
@@ -17,12 +18,13 @@ var (
 	Client *mongo.Client
 
 	HyperUsers *mongo.Collection
+	GitCommits *mongo.Collection
 	Events     *mongo.Collection
 )
 
 const databaseName = "hypervisor"
 
-func InitDB() error {
+func InitDB(deployment string) error {
 	var err error
 
 	Client, err = mongo.Connect(
@@ -41,7 +43,18 @@ func InitDB() error {
 
 	db := Client.Database(databaseName)
 	HyperUsers = db.Collection("hyperusers")
-	Events = db.Collection("events")
+
+	gitCommitCollection := "git_commits"
+	eventsCollection := "events"
+
+	if strings.EqualFold(strings.TrimSpace(deployment), "test") {
+		// Use isolated collections so webhook tests do not mutate production data.
+		gitCommitCollection = "test_git_commits"
+		eventsCollection = "test_events"
+	}
+
+	GitCommits = db.Collection(gitCommitCollection)
+	Events = db.Collection(eventsCollection)
 
 	return nil
 }
