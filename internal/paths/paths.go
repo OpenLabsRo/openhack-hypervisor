@@ -1,0 +1,56 @@
+package paths
+
+import "path/filepath"
+
+const (
+	// HypervisorBaseDir is the root directory that stores hypervisor-managed assets.
+	HypervisorBaseDir = "/var/hypervisor"
+
+	// HypervisorReposDir holds cloned git repositories used to build the hypervisor daemon.
+	HypervisorReposDir = HypervisorBaseDir + "/repos"
+
+	// HypervisorBuildsDir stores compiled hypervisor binaries by version.
+	HypervisorBuildsDir = HypervisorBaseDir + "/builds"
+
+	// HypervisorEnvDir contains environment configuration consumed by the daemon.
+	HypervisorEnvDir = HypervisorBaseDir + "/env"
+
+	// HypervisorLogsDir is where hypervisor and hyperctl log output is persisted.
+	HypervisorLogsDir = HypervisorBaseDir + "/logs"
+
+	// OpenHackBaseDir is the root directory that stores OpenHack-managed assets.
+	OpenHackBaseDir = "/var/openhack"
+
+	// OpenHackReposDir holds cloned OpenHack backend repositories.
+	OpenHackReposDir = OpenHackBaseDir + "/repos"
+
+	// OpenHackBuildsDir stores built OpenHack backend releases.
+	OpenHackBuildsDir = OpenHackBaseDir + "/builds"
+
+	// OpenHackEnvDir contains environment configuration shared with backend builds.
+	OpenHackEnvDir = OpenHackBaseDir + "/env"
+)
+
+// HypervisorPath joins one or more path segments underneath HypervisorBaseDir.
+func HypervisorPath(parts ...string) string {
+	elems := append([]string{HypervisorBaseDir}, parts...)
+	return filepath.Join(elems...)
+}
+
+// OpenHackRepoPath joins path segments underneath OpenHackReposDir.
+func OpenHackRepoPath(parts ...string) string {
+	elems := append([]string{OpenHackReposDir}, parts...)
+	return filepath.Join(elems...)
+}
+
+// OpenHackBuildPath joins path segments underneath OpenHackBuildsDir.
+func OpenHackBuildPath(parts ...string) string {
+	elems := append([]string{OpenHackBuildsDir}, parts...)
+	return filepath.Join(elems...)
+}
+
+// OpenHackEnvPath joins path segments underneath OpenHackEnvDir.
+func OpenHackEnvPath(parts ...string) string {
+	elems := append([]string{OpenHackEnvDir}, parts...)
+	return filepath.Join(elems...)
+}

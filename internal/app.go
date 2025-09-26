@@ -41,6 +41,10 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 		return c.SendString("PONG")
 	})
 
+	hypervisor.Get("/version", func(c fiber.Ctx) error {
+		return c.SendString(env.VERSION)
+	})
+
 	hyperusers.Routes(hypervisor)
 	githubhooks.Routes(hypervisor)
 
