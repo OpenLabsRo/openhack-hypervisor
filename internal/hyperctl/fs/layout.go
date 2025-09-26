@@ -59,14 +59,17 @@ func ensureDirs(dirs []string) error {
 	owner := fmt.Sprintf("%s:%s", current.Uid, current.Gid)
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			if !errors.Is(err, os.ErrPermission) && !os.IsPermission(err) {
-				return fmt.Errorf("failed to create %s: %w", dir, err)
+		info, statErr := os.Stat(dir)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				if err := createDir(dir); err != nil {
+					return err
+				}
+			} else {
+				return fmt.Errorf("failed to stat %s: %w", dir, statErr)
 			}
-
-			if err := runSudo("mkdir", "-p", dir); err != nil {
-				return fmt.Errorf("sudo mkdir -p %s: %w", dir, err)
-			}
+		} else if !info.IsDir() {
+			return fmt.Errorf("path exists and is not a directory: %s", dir)
 		}
 
 		if err := os.Chown(dir, uid, gid); err != nil {
@@ -77,6 +80,20 @@ func ensureDirs(dirs []string) error {
 				continue
 			}
 			return fmt.Errorf("failed to chown %s: %w", dir, err)
+		}
+	}
+
+	return nil
+}
+
+func createDir(path string) error {
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		if !errors.Is(err, os.ErrPermission) && !os.IsPermission(err) {
+			return fmt.Errorf("failed to create %s: %w", path, err)
+		}
+
+		if err := runSudo("mkdir", "-p", path); err != nil {
+			return fmt.Errorf("sudo mkdir -p %s: %w", path, err)
 		}
 	}
 

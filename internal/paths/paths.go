@@ -4,7 +4,7 @@ import "path/filepath"
 
 const (
 	// HypervisorBaseDir is the root directory that stores hypervisor-managed assets.
-	HypervisorBaseDir = "/var/hypervisor"
+	HypervisorBaseDir = "~/hypervisor"
 
 	// HypervisorReposDir holds cloned git repositories used to build the hypervisor daemon.
 	HypervisorReposDir = HypervisorBaseDir + "/repos"
@@ -19,7 +19,7 @@ const (
 	HypervisorLogsDir = HypervisorBaseDir + "/logs"
 
 	// OpenHackBaseDir is the root directory that stores OpenHack-managed assets.
-	OpenHackBaseDir = "/var/openhack"
+	OpenHackBaseDir = "~/openhack"
 
 	// OpenHackReposDir holds cloned OpenHack backend repositories.
 	OpenHackReposDir = OpenHackBaseDir + "/repos"

@@ -14,6 +14,7 @@ import (
 	"hypervisor/internal/hyperctl/git"
 	"hypervisor/internal/hyperctl/state"
 	"hypervisor/internal/hyperctl/system"
+	"hypervisor/internal/hyperctl/systemd"
 	"hypervisor/internal/paths"
 )
 
@@ -100,6 +101,12 @@ func RunSetup(args []string) error {
 	}
 	fmt.Printf("Build complete: %s\n", buildResult.BinaryPath)
 
+	fmt.Println("Stopping existing hypervisor service (if running)...")
+	if err := systemd.StopHypervisorService(); err != nil {
+		return err
+	}
+	fmt.Println("Hypervisor service stopped")
+
 	fmt.Printf("Updating current build symlink to %s...\n", buildResult.BinaryPath)
 	if err := updateCurrentSymlink(buildResult.BinaryPath); err != nil {
 		return err
@@ -116,6 +123,19 @@ func RunSetup(args []string) error {
 		return err
 	}
 	fmt.Println("State saved")
+
+	fmt.Println("Installing systemd unit for hypervisor...")
+	cfg := systemd.ServiceConfig{
+		BinaryPath: buildResult.BinaryPath,
+		Deployment: "prod",
+		Port:       "8080",
+		EnvRoot:    paths.HypervisorEnvDir,
+		Version:    buildResult.Version,
+	}
+	if err := systemd.InstallHypervisorService(cfg); err != nil {
+		return err
+	}
+	fmt.Println("Systemd unit installed and service restarted")
 
 	fmt.Printf("Setup completed successfully for version %s (commit %s).\n", buildResult.Version, commitHash)
 

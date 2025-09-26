@@ -4,6 +4,8 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION_FILE="${PROJECT_ROOT}/VERSION"
 DATE_PREFIX="$(date '+%y.%m.%d')"
+BIN_DIR="${PROJECT_ROOT}/bin"
+HYPERCTL_BIN="${BIN_DIR}/hyperctl"
 
 usage() {
     cat <<USAGE
@@ -86,6 +88,11 @@ fi
 echo "${NEW_VERSION}" > "${VERSION_FILE}"
 printf 'VERSION updated to %s\n' "${NEW_VERSION}"
 
+echo "Building hyperctl CLI binary..."
+mkdir -p "${BIN_DIR}"
+(cd "${PROJECT_ROOT}" && GOCACHE="${PROJECT_ROOT}/tmp/.gocache" go build -o "${HYPERCTL_BIN}" ./cmd/hyperctl)
+printf 'hyperctl binary written to %s\n' "${HYPERCTL_BIN}"
+
 if (( GIT_PUSH )); then
     git -C "${PROJECT_ROOT}" add VERSION
     git -C "${PROJECT_ROOT}" commit -m "release: ${NEW_VERSION}" >/dev/null
@@ -93,4 +100,20 @@ if (( GIT_PUSH )); then
     git -C "${PROJECT_ROOT}" push
     git -C "${PROJECT_ROOT}" push origin "v${NEW_VERSION}"
     printf 'Pushed commit and tag v%s\n' "${NEW_VERSION}"
+
+    if ! command -v gh >/dev/null 2>&1; then
+        echo "GitHub CLI (gh) is required to create releases. Install it or rerun with --no-git." >&2
+        exit 1
+    fi
+
+    RELEASE_NOTES_FILE="$(mktemp)"
+    trap 'rm -f "${RELEASE_NOTES_FILE}"' EXIT
+    git -C "${PROJECT_ROOT}" log -1 --pretty=format:%B > "${RELEASE_NOTES_FILE}"
+
+    gh release create "v${NEW_VERSION}" "${HYPERCTL_BIN}" \
+        --title "bumping to version ${NEW_VERSION}" \
+        --notes-file "${RELEASE_NOTES_FILE}"
+    rm -f "${RELEASE_NOTES_FILE}"
+    trap - EXIT
+    printf 'Created GitHub release v%s with hyperctl asset\n' "${NEW_VERSION}"
 fi

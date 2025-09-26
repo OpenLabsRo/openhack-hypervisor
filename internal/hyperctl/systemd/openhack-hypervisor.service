@@ -1,0 +1,24 @@
+[Unit]
+Description=OpenHack Hypervisor
+After=network.target redis.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=openhack
+Group=openhack
+ExecStart=/var/hypervisor/builds/current \
+    --deployment prod \
+    --port 8080 \
+    --env-root /var/hypervisor/env
+WorkingDirectory=/var/hypervisor
+Restart=always
+RestartSec=1s
+StartLimitIntervalSec=30
+StartLimitBurst=10
+StandardOutput=journal
+StandardError=journal
+Environment=GODEBUG=madvdontneed=1
+
+[Install]
+WantedBy=multi-user.target
