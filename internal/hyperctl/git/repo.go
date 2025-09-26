@@ -72,7 +72,7 @@ func EnsureRepoAtTag(repoURL, destDir, tag string) (string, error) {
 		if err := os.RemoveAll(destDir); err != nil {
 			return "", fmt.Errorf("failed to clean repo dir: %w", err)
 		}
-		cmd := exec.Command("git", "clone", "--branch", tag, "--single-branch", repoURL, destDir)
+		cmd := exec.Command("git", "clone", "--quiet", "--branch", tag, "--single-branch", repoURL, destDir)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
