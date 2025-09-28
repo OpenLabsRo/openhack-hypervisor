@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -134,6 +135,7 @@ func RunSetup(args []string) error {
 		Port:       "8080",
 		EnvRoot:    paths.HypervisorEnvDir,
 		Version:    buildResult.Version,
+		GoPath:     runtime.GOROOT(),
 	}
 	if err := systemd.InstallHypervisorService(cfg); err != nil {
 		return err

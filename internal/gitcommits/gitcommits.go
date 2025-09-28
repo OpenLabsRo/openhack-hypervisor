@@ -1,4 +1,3 @@
-
 package gitcommits
 
 import (
@@ -7,10 +6,20 @@ import (
 	"hypervisor/internal/models"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func Create(commit models.GitCommit) error {
-	_, err := db.GitCommits.InsertOne(context.TODO(), commit)
+	filter := bson.M{
+		"delivery_id": commit.DeliveryID,
+		"sha":         commit.SHA,
+	}
+
+	update := bson.M{
+		"$setOnInsert": commit,
+	}
+
+	_, err := db.GitCommits.UpdateOne(context.TODO(), filter, update, options.Update().SetUpsert(true))
 	return err
 }
 

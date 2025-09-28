@@ -1,4 +1,3 @@
-
 package db
 
 import (
@@ -7,10 +6,13 @@ import (
 	"hypervisor/internal/models"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func Create(release models.Release) error {
-	_, err := db.Releases.InsertOne(context.TODO(), release)
+	filter := bson.M{"tag": release.Tag}
+	update := bson.M{"$setOnInsert": release}
+	_, err := db.Releases.UpdateOne(context.TODO(), filter, update, options.Update().SetUpsert(true))
 	return err
 }
 

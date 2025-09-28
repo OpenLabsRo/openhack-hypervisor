@@ -21,6 +21,7 @@ type ServiceConfig struct {
 	Port       string
 	EnvRoot    string
 	Version    string
+	GoPath     string
 }
 
 // InstallHypervisorService writes the hypervisor unit file and reloads systemd.

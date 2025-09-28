@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	repoURL = "https://github.com/openlabsro/openhack-backend.git"
+	repoURL              = "https://github.com/openlabsro/openhack-backend.git"
+	manualSyncDeliveryID = "manual-sync"
 )
 
 var (
@@ -45,9 +46,11 @@ func syncCommitsHandler(c fiber.Ctx) error {
 
 	for _, tag := range tags {
 		commit := models.GitCommit{
-			Ref:       "refs/tags/" + tag,
-			Message:   "tag: " + tag,
-			Timestamp: time.Now(),
+			DeliveryID: manualSyncDeliveryID,
+			Ref:        "refs/tags/" + tag,
+			SHA:        tag,
+			Message:    "tag: " + tag,
+			Timestamp:  time.Now(),
 		}
 		if err := Create(commit); err != nil {
 			if !strings.Contains(err.Error(), "duplicate key error") {
