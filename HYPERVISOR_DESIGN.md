@@ -14,7 +14,7 @@
   - Runs under a system-level systemd unit (`openhack-hypervisor.service`).
   - Terminates TLS/HTTP, forwards requests to the active backend color.
   - Stores state in MongoDB `hypervisor` database: release metadata, deployment records, GitHub events, hyperuser sessions.
-  - Exposes APIs for webhook ingestion, deployment control, status/health, and hyperuser login.
+  - Exposes APIs for webhook ingestion, deployment control, status/health, hyperuser login, and to view git commits and releases.
   - On startup reconciles DB state, restarts the previously active color, verifies health, and resumes proxying.
 
 - **Backend colors (blue/green)**
@@ -25,7 +25,7 @@
   - Health checks: readiness probe (`/ping`/`/version`), optional smoke tests before promotion, continuous liveness polling for automatic restart/redploy.
 
 - **Command-line tools**
-  - `hyperctl`: server-resident utility. `setup` clones/builds/deploys the daemon, writes/upgrades systemd units, seeds config, enables lingering; `upgrade` pulls and rebuilds the hypervisor before restarting it; `restart`/`status` (and optional `logs`, `reconcile`) wrap systemd and local health checks. Runs locally and requires no auth.
+  - `hyperctl`: server-resident utility. `setup` clones/builds/deploys the daemon, writes/upgrades systemd units, seeds config, enables lingering, and triggers an initial sync of git tags; `upgrade` pulls and rebuilds the hypervisor before restarting it; `restart`/`status` (and optional `logs`, `reconcile`) wrap systemd and local health checks. Runs locally and requires no auth.
   - `hyper-cli`: operator CLI used from remote machines. Authenticates as hyperuser for every session, lists release tags, inspects build/test logs, stages builds, and promotes or rolls back traffic via `switch`.
   - Future additions: `hyper-cli logs`, `hyper-cli rollback`, `hyper-cli config` for expanded remote control.
 
@@ -38,8 +38,8 @@
 
 2. **GitHub webhook**: Hypervisor listens for push/tag webhook events.
 
-   - Validates signature, records tag metadata (name, SHA, author, timestamp) in Mongo.
-   - Marks tag as deployable candidate when it matches release template (tag + `VERSION` change).
+   - Validates signature, records raw commit data in the `git_commits` collection.
+   - If the event is for a release tag (e.g., `v1.2.3`), it transforms the commit into a `Release` object and saves it to the `releases` collection.
 
 3. **Operator selects tag** using `hyper-cli` or the dashboard.
 
@@ -99,7 +99,8 @@
 ## Data & State
 
 - MongoDB `hypervisor` DB collections:
-  - `releases`: tag metadata, build/test results, artifact paths, env settings, timestamps.
+  - `git_commits`: raw commit data from GitHub webhooks.
+  - `releases`: actionable release objects, transformed from git commits with release tags.
   - `deployments`: current and historical blue/green assignments, active color pointer, health statuses.
   - `hyperusers`: superuser credential mirror (hashed passwords, roles).
   - `sessions`: issued hyperuser tokens with TTL.

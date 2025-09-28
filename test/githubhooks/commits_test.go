@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"hypervisor/internal/db"
+	"hypervisor/internal/models"
 
 	"github.com/gofiber/fiber/v3"
 	"go.mongodb.org/mongo-driver/bson"
@@ -137,4 +138,58 @@ func signPayload(secret, payload []byte) []byte {
 	h := hmac.New(sha256.New, secret)
 	h.Write(payload)
 	return h.Sum(nil)
+}
+
+func TestGitHubTagEventCreatesRelease(t *testing.T) {
+	// Ensure the test collections are clean before starting.
+	_, _ = db.GitCommits.DeleteMany(db.Ctx, bson.M{"delivery_id": testDeliveryID, "sha": testCommitSHA})
+	_, _ = db.Releases.DeleteMany(db.Ctx, bson.M{"tag": "v1.2.3"})
+
+	payload := map[string]any{
+		"ref": "refs/tags/v1.2.3",
+		"commits": []map[string]any{
+			{
+				"id":        testCommitSHA,
+				"message":   "chore: release v1.2.3",
+				"timestamp": time.Now().UTC().Format(time.RFC3339),
+				"author": map[string]string{
+					"name":  testCommitAuthor,
+					"email": testAuthorEmail,
+				},
+			},
+		},
+	}
+
+	body := mustEncodeJSON(t, payload)
+	req := newWebhookRequest(t, http.MethodPost, "/hypervisor/github/commits", body)
+	req.Header.Set("X-GitHub-Event", "push")
+	req.Header.Set("X-GitHub-Delivery", testDeliveryID)
+	req.Header.Set("X-Hub-Signature-256", fmt.Sprintf("sha256=%x", signPayload([]byte(testSecret), body)))
+
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("failed to execute request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected status %d, got %d (body=%s)", http.StatusAccepted, resp.StatusCode, string(b))
+	}
+
+	// Check if commit is stored
+	var storedCommit models.GitCommit
+	if err := db.GitCommits.FindOne(db.Ctx, bson.M{"delivery_id": testDeliveryID, "sha": testCommitSHA}).Decode(&storedCommit); err != nil {
+		t.Fatalf("failed to find stored commit: %v", err)
+	}
+
+	// Check if release is created
+	var storedRelease models.Release
+	if err := db.Releases.FindOne(db.Ctx, bson.M{"tag": "v1.2.3"}).Decode(&storedRelease); err != nil {
+		t.Fatalf("failed to find stored release: %v", err)
+	}
+
+	if storedRelease.Status != "new" {
+		t.Fatalf("expected release status 'new', got '%s'", storedRelease.Status)
+	}
 }

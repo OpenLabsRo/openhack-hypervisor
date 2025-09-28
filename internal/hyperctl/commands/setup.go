@@ -1,9 +1,12 @@
 package commands
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -137,8 +140,81 @@ func RunSetup(args []string) error {
 	}
 	fmt.Println("Systemd unit installed and service restarted")
 
+	if err := runReleaseSync(); err != nil {
+		return err
+	}
+
+	if err := stageLatestRelease(); err != nil {
+		return err
+	}
+
 	fmt.Printf("Setup completed successfully for version %s (commit %s).\n", buildResult.Version, commitHash)
 
+	return nil
+}
+
+func runReleaseSync() error {
+	fmt.Println("Triggering initial release sync...")
+	resp, err := http.Post("http://localhost:8080/hypervisor/gitcommits/sync", "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("failed to trigger release sync: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("release sync failed with status: %s", resp.Status)
+	}
+
+	fmt.Println("Release sync completed successfully.")
+	return nil
+}
+
+func stageLatestRelease() error {
+	fmt.Println("Getting releases...")
+	resp, err := http.Get("http://localhost:8080/hypervisor/releases")
+	if err != nil {
+		return fmt.Errorf("failed to get releases: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to get releases: status %s", resp.Status)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read releases response: %w", err)
+	}
+
+	type Release struct {
+		Tag string `json:"tag"`
+	}
+	var releases []Release
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return fmt.Errorf("failed to parse releases response: %w", err)
+	}
+
+	if len(releases) == 0 {
+		return fmt.Errorf("no releases found to stage")
+	}
+
+	latestRelease := releases[len(releases)-1]
+	tag := latestRelease.Tag
+
+	fmt.Printf("Staging latest release: %s\n", tag)
+
+	stageURL := fmt.Sprintf("http://localhost:8080/hypervisor/releases/%s/stage", tag)
+	resp, err = http.Post(stageURL, "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("failed to stage release: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to stage release: status %s", resp.Status)
+	}
+
+	fmt.Println("Staging process started successfully.")
 	return nil
 }
 

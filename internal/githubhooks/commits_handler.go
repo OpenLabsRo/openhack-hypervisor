@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"hypervisor/internal/errmsg"
 	"hypervisor/internal/events"
 	"hypervisor/internal/models"
+	"hypervisor/internal/transformer"
 	"hypervisor/internal/utils"
 
 	"github.com/gofiber/fiber/v3"
@@ -108,6 +110,13 @@ func commitsHandler(c fiber.Ctx) error {
 		// Store and announce each commit individually to stay idempotent per SHA.
 		if err := upsertCommit(gitCommit); err != nil {
 			return utils.StatusError(c, errmsg.InternalServerError(err))
+		}
+
+		// Transform commit into a release if applicable
+		if err := transformer.Transform(gitCommit); err != nil {
+			// For now, we can log this error and continue.
+			// Depending on the requirements, we might want to handle this differently.
+			log.Printf("failed to transform commit %s into a release: %v", gitCommit.SHA, err)
 		}
 
 		if events.Em != nil {

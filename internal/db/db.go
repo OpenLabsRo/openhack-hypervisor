@@ -19,6 +19,7 @@ var (
 
 	HyperUsers *mongo.Collection
 	GitCommits *mongo.Collection
+	Releases   *mongo.Collection
 	Events     *mongo.Collection
 )
 
@@ -45,15 +46,18 @@ func InitDB(deployment string) error {
 	HyperUsers = db.Collection("hyperusers")
 
 	gitCommitCollection := "git_commits"
+	releasesCollection := "releases"
 	eventsCollection := "events"
 
 	if strings.EqualFold(strings.TrimSpace(deployment), "test") {
 		// Use isolated collections so webhook tests do not mutate production data.
 		gitCommitCollection = "test_git_commits"
+		releasesCollection = "test_releases"
 		eventsCollection = "test_events"
 	}
 
 	GitCommits = db.Collection(gitCommitCollection)
+	Releases = db.Collection(releasesCollection)
 	Events = db.Collection(eventsCollection)
 
 	return nil
