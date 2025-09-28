@@ -1,4 +1,3 @@
-
 package api
 
 import (
@@ -10,7 +9,7 @@ import (
 func Routes(app fiber.Router) {
 	releases := app.Group("/releases")
 	releases.Get("/", getAllReleasesHandler)
-	releases.Post("/:tag/stage", stageReleaseHandler)
+	releases.Post("/stage", stageReleaseHandler)
 }
 
 func getAllReleasesHandler(c fiber.Ctx) error {
@@ -22,7 +21,10 @@ func getAllReleasesHandler(c fiber.Ctx) error {
 }
 
 func stageReleaseHandler(c fiber.Ctx) error {
-    tag := c.Params("tag")
+    tag := c.Query("version")
+    if tag == "" {
+        return c.Status(400).JSON(fiber.Map{"error": "version query parameter is required"})
+    }
     if err := staging.StageRelease(tag); err != nil {
         return c.Status(500).JSON(fiber.Map{"error": err.Error()})
     }

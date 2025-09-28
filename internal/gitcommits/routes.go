@@ -1,4 +1,3 @@
-
 package gitcommits
 
 import (
@@ -13,7 +12,7 @@ import (
 )
 
 const (
-	repoURL = "https://github.com/openlabs-org/openhack-backend.git"
+	repoURL = "https://github.com/openlabsro/openhack-backend.git"
 )
 
 var (
@@ -55,10 +54,10 @@ func syncCommitsHandler(c fiber.Ctx) error {
 				return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 			}
 		}
-        // Transform
-        if err := transformer.Transform(commit); err != nil {
-            return c.Status(500).JSON(fiber.Map{"error": err.Error()})
-        }
+		// Transform
+		if err := transformer.Transform(commit); err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
 	}
 
 	return c.SendString("OK")
