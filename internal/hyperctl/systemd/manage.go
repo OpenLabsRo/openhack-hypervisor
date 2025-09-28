@@ -12,7 +12,7 @@ import (
 	"text/template"
 )
 
-const systemdUnitDir = "/etc/systemd/system"
+const systemdUnitDir = "/lib/systemd/system"
 
 // ServiceConfig carries values rendered into the systemd unit template.
 type ServiceConfig struct {

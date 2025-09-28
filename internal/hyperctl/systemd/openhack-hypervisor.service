@@ -5,12 +5,11 @@ Requires=redis.service
 
 [Service]
 Type=simple
-User=openhack
-Group=openhack
-ExecStart=/var/hypervisor/builds/current \
-    --deployment prod \
-    --port 8080 \
-    --env-root /var/hypervisor/env
+ExecStart={{.BinaryPath}} \
+    --deployment {{.Deployment}} \
+    --port {{.Port}} \
+    --env-root {{.EnvRoot}} \
+    --app-version {{.Version}}
 WorkingDirectory=/var/hypervisor
 Restart=always
 RestartSec=1s

@@ -3,7 +3,6 @@ package system
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 )
 
@@ -34,22 +33,7 @@ func EnsureSystemctlAccessible() error {
 
 // ResolveEditor determines which editor should be used for interactive edits.
 func ResolveEditor() string {
-	editor := lookupEnv("VISUAL")
-	if editor == "" {
-		editor = lookupEnv("EDITOR")
-	}
-	if editor == "" {
-		editor = "vim"
-	}
-	return editor
-}
-
-func lookupEnv(key string) string {
-	val, ok := os.LookupEnv(key)
-	if !ok {
-		return ""
-	}
-	return val
+	return "vim"
 }
 
 // EnsureRedisAvailable validates that redis-server binary is installed.
