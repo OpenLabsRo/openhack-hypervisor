@@ -25,21 +25,70 @@ func CloneOrPull(repoURL, path string) error {
 		return fmt.Errorf("failed to stat %s: %w", path, err)
 	}
 
-	// Path exists, check if it's a git repository.
-	cmd := exec.Command("git", "-C", path, "rev-parse", "--is-inside-work-tree")
-	if err := cmd.Run(); err != nil {
-		// Directory exists but is not a git repo (or is corrupted). Rebuild it from scratch.
-		if rmErr := os.RemoveAll(path); rmErr != nil {
-			return fmt.Errorf("failed to clean %s before recloning: %w", path, rmErr)
-		}
-		return clone()
+	if err := EnsureWorkTree(path); err != nil {
+		return err
+	}
+	if err := EnsureRemote(path, repoURL); err != nil {
+		return err
 	}
 
-	// It's a git repository, so pull.
-	cmd = exec.Command("git", "-C", path, "pull")
+	if err := FetchTags(path); err != nil {
+		return err
+	}
+	if err := runGit(path, "pull", "--ff-only", "origin"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func EnsureWorkTree(path string) error {
+	cmd := exec.Command("git", "-C", path, "rev-parse", "--is-inside-work-tree")
+	if err := cmd.Run(); err == nil {
+		return nil
+	}
+
+	if err := runGit(path, "init"); err != nil {
+		return fmt.Errorf("failed to initialise git repository at %s: %w", path, err)
+	}
+	return nil
+}
+
+func EnsureRemote(path, repoURL string) error {
+	cmd := exec.Command("git", "-C", path, "remote", "get-url", "origin")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git pull failed: %w\n%s", err, output)
+		return runGit(path, "remote", "add", "origin", repoURL)
+	}
+
+	current := strings.TrimSpace(string(output))
+	if current == repoURL {
+		return nil
+	}
+
+	return runGit(path, "remote", "set-url", "origin", repoURL)
+}
+
+func runGit(path string, args ...string) error {
+	cmd := exec.Command("git", append([]string{"-C", path}, args...)...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// FetchTags updates tags and remote references for the repository at path.
+func FetchTags(path string) error {
+	return runGit(path, "fetch", "--prune", "--tags", "origin")
+}
+
+// CheckoutTag ensures the worktree at path is positioned at the requested tag.
+func CheckoutTag(path, tag string) error {
+	if err := runGit(path, "checkout", "--force", tag); err != nil {
+		return fmt.Errorf("git checkout %s failed: %w", tag, err)
+	}
+
+	if err := runGit(path, "reset", "--hard", tag); err != nil {
+		return fmt.Errorf("git reset --hard %s failed: %w", tag, err)
 	}
 
 	return nil

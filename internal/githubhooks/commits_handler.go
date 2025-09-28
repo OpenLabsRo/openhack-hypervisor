@@ -97,8 +97,35 @@ func commitsHandler(c fiber.Ctx) error {
 	}
 
 	if len(pushPayload.Commits) == 0 {
-		// Pushes can be empty (e.g. branch deletes); treat as a no-op.
-		return c.SendStatus(fiber.StatusNoContent)
+		if strings.HasPrefix(pushPayload.Ref, "refs/tags/") {
+			tag := strings.TrimPrefix(pushPayload.Ref, "refs/tags/")
+			commit := models.GitCommit{
+				DeliveryID: deliveryID,
+				Ref:        pushPayload.Ref,
+				SHA:        tag,
+				Message:    "tag: " + tag,
+				Timestamp:  time.Now(),
+			}
+
+			if err := upsertCommit(commit); err != nil {
+				return utils.StatusError(c, errmsg.InternalServerError(err))
+			}
+
+			if err := transformer.Transform(commit); err != nil {
+				log.Printf("failed to transform commit %s into a release: %v", commit.SHA, err)
+			}
+
+			if events.Em != nil {
+				events.Em.GitHubCommitReceived(
+					deliveryID,
+					commit.SHA,
+					commit.Ref,
+					commit.Message,
+				)
+			}
+		}
+
+		return c.SendStatus(fiber.StatusAccepted)
 	}
 
 	for _, commit := range pushPayload.Commits {

@@ -193,3 +193,40 @@ func TestGitHubTagEventCreatesRelease(t *testing.T) {
 		t.Fatalf("expected release status 'new', got '%s'", storedRelease.Status)
 	}
 }
+
+func TestGitHubTagEventWithoutCommitsStillCreatesRelease(t *testing.T) {
+	const tagRef = "refs/tags/v9.9.9"
+	_, _ = db.GitCommits.DeleteMany(db.Ctx, bson.M{"ref": tagRef})
+	_, _ = db.Releases.DeleteMany(db.Ctx, bson.M{"tag": "v9.9.9"})
+
+	payload := map[string]any{
+		"ref":     tagRef,
+		"commits": []map[string]any{},
+	}
+
+	body := mustEncodeJSON(t, payload)
+	req := newWebhookRequest(t, http.MethodPost, "/hypervisor/github/commits", body)
+	req.Header.Set("X-GitHub-Event", "push")
+	req.Header.Set("X-GitHub-Delivery", testDeliveryID)
+	req.Header.Set("X-Hub-Signature-256", fmt.Sprintf("sha256=%x", signPayload([]byte(testSecret), body)))
+
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("failed to execute request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected status %d, got %d (body=%s)", http.StatusAccepted, resp.StatusCode, string(b))
+	}
+
+	var storedRelease models.Release
+	if err := db.Releases.FindOne(db.Ctx, bson.M{"tag": "v9.9.9"}).Decode(&storedRelease); err != nil {
+		t.Fatalf("failed to find stored release: %v", err)
+	}
+
+	if storedRelease.Status != "new" {
+		t.Fatalf("expected release status 'new', got '%s'", storedRelease.Status)
+	}
+}

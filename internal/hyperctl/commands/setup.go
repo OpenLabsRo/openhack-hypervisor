@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -14,21 +13,25 @@ import (
 
 	"hypervisor/internal/hyperctl/build"
 	fsops "hypervisor/internal/hyperctl/fs"
-	"hypervisor/internal/hyperctl/git"
-	"hypervisor/internal/hyperctl/staging"
+	hyperctlgit "hypervisor/internal/hyperctl/git"
 	"hypervisor/internal/hyperctl/state"
 	"hypervisor/internal/hyperctl/system"
 	"hypervisor/internal/hyperctl/systemd"
 	"hypervisor/internal/paths"
+
+	backendgit "hypervisor/internal/git"
+)
+
+const (
+	hypervisorRepoURL      = "https://github.com/OpenLabsRo/openhack-hypervisor"
+	openHackBackendRepoURL = "https://github.com/openlabsro/openhack-backend.git"
+	openHackBackendRepoDir = "backend"
 )
 
 // RunSetup handles the `hyperctl setup` subcommand.
 func RunSetup(args []string) error {
-	skipEdit := true
-
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.BoolVar(&skipEdit, "no-edit", false, "skip opening the env file in an editor")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -46,25 +49,15 @@ func RunSetup(args []string) error {
 	}
 	fmt.Println("Directory layout ready")
 
-	envPath := filepath.Join(paths.HypervisorEnvDir, ".env")
-	fmt.Printf("Preparing environment file at %s...\n", envPath)
-	if err := fsops.EnsureEnvFile(envPath); err != nil {
+	editor := system.ResolveEditor()
+
+	hypervisorEnvPath := fsops.HypervisorEnvPath()
+	if err := fsops.EnsureEnvDirFor(hypervisorEnvPath); err != nil {
 		return err
 	}
-	fmt.Println("Environment file ready")
-
-	if !skipEdit {
-		editor := system.ResolveEditor()
-		fmt.Printf("Opening %s with %s...\n", envPath, editor)
-		if err := launchEditor(editor, envPath); err != nil {
-			return fmt.Errorf("editor exit error: %w", err)
-		}
-		fmt.Println("Environment file saved")
-	} else {
-		fmt.Println("Skipping interactive edit (--no-edit)")
+	if err := fsops.EditEnvFileIfMissing("Hypervisor", hypervisorEnvPath, editor); err != nil {
+		return err
 	}
-
-	repoURL := "https://github.com/OpenLabsRo/openhack-hypervisor"
 
 	tagInput := ""
 	var tagName string
@@ -73,14 +66,14 @@ func RunSetup(args []string) error {
 
 	if tagInput == "" {
 		fmt.Println("Resolving latest release tag...")
-		tagName, commitHash, err = git.LatestRemoteTag(repoURL, "v")
+		tagName, commitHash, err = hyperctlgit.LatestRemoteTag(hypervisorRepoURL, "v")
 		if err != nil {
 			return fmt.Errorf("failed to determine latest tag: %w", err)
 		}
 	} else {
 		tagName = normalizeTag(tagInput)
 		fmt.Printf("Resolving commit for tag %s...\n", tagName)
-		commitHash, err = git.TagCommit(repoURL, tagName)
+		commitHash, err = hyperctlgit.TagCommit(hypervisorRepoURL, tagName)
 		if err != nil {
 			return fmt.Errorf("failed to resolve commit for %s: %w", tagName, err)
 		}
@@ -91,7 +84,7 @@ func RunSetup(args []string) error {
 
 	repoDir := filepath.Join(paths.HypervisorReposDir, version)
 	fmt.Printf("Ensuring repository checkout at %s...\n", repoDir)
-	checkoutCommit, err := git.EnsureRepoAtTag(repoURL, repoDir, tagName)
+	checkoutCommit, err := hyperctlgit.EnsureRepoAtTag(hypervisorRepoURL, repoDir, tagName)
 	if err != nil {
 		return err
 	}
@@ -142,15 +135,22 @@ func RunSetup(args []string) error {
 	}
 	fmt.Println("Systemd unit installed and service restarted")
 
+	openHackEnvPath := fsops.OpenHackEnvPath()
+	if err := fsops.EnsureEnvDirFor(openHackEnvPath); err != nil {
+		return err
+	}
+	if err := fsops.EditEnvFileIfMissing("OpenHack", openHackEnvPath, editor); err != nil {
+		return err
+	}
+
+	fmt.Println("Syncing OpenHack backend repository...")
+	backendRepoPath := paths.OpenHackRepoPath(openHackBackendRepoDir)
+	if err := backendgit.CloneOrPull(openHackBackendRepoURL, backendRepoPath); err != nil {
+		return fmt.Errorf("failed to sync backend repository: %w", err)
+	}
+	fmt.Println("OpenHack backend repository is up to date")
+
 	if err := waitForServerReady(); err != nil {
-		return err
-	}
-
-	if err := runReleaseSync(); err != nil {
-		return err
-	}
-
-	if err := staging.StageLatest(); err != nil {
 		return err
 	}
 
@@ -161,7 +161,7 @@ func RunSetup(args []string) error {
 
 func waitForServerReady() error {
 	fmt.Println("Waiting for hypervisor service to be ready...")
-	for i := 0; i < 10; i++ { // Try for 10 seconds
+	for i := 0; i < 10; i++ {
 		resp, err := http.Get("http://localhost:8080/hypervisor/ping")
 		if err == nil && resp.StatusCode == http.StatusOK {
 			fmt.Println("Hypervisor service is ready.")
@@ -170,37 +170,6 @@ func waitForServerReady() error {
 		time.Sleep(1 * time.Second)
 	}
 	return fmt.Errorf("hypervisor service is not ready after 10 seconds")
-}
-
-func runReleaseSync() error {
-	fmt.Println("Triggering initial release sync...")
-	resp, err := http.Post("http://localhost:8080/hypervisor/gitcommits/sync", "application/json", nil)
-	if err != nil {
-		return fmt.Errorf("failed to trigger release sync: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("release sync failed with status %s: %s", resp.Status, string(body))
-	}
-
-	fmt.Println("Release sync completed successfully.")
-	return nil
-}
-
-func launchEditor(editor, path string) error {
-	fields := strings.Fields(editor)
-	if len(fields) == 0 {
-		return fmt.Errorf("invalid editor command")
-	}
-
-	cmd := exec.Command(fields[0], append(fields[1:], path)...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
 }
 
 func checkPrerequisites() error {
