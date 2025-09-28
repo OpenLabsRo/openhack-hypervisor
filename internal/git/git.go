@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -16,7 +17,7 @@ func CloneOrPull(repoURL, path string) error {
 		if err != nil {
 			return fmt.Errorf("git clone failed: %w\n%s", err, output)
 		}
-		return nil
+		return ensureSafeDirectory(path)
 	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -39,19 +40,19 @@ func CloneOrPull(repoURL, path string) error {
 		return err
 	}
 
-	return nil
+	return ensureSafeDirectory(path)
 }
 
 func EnsureWorkTree(path string) error {
 	cmd := exec.Command("git", "-C", path, "rev-parse", "--is-inside-work-tree")
 	if err := cmd.Run(); err == nil {
-		return nil
+		return ensureSafeDirectory(path)
 	}
 
 	if err := runGit(path, "init"); err != nil {
 		return fmt.Errorf("failed to initialise git repository at %s: %w", path, err)
 	}
-	return nil
+	return ensureSafeDirectory(path)
 }
 
 func EnsureRemote(path, repoURL string) error {
@@ -116,6 +117,17 @@ func CloneTag(repoURL, tag, path string) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git clone failed: %w\n%s", err, output)
+	}
+	return ensureSafeDirectory(path)
+}
+
+func ensureSafeDirectory(path string) error {
+	clean := filepath.Clean(path)
+	cmd := exec.Command("git", "config", "--global", "--add", "safe.directory", clean)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to mark %s as a safe git directory: %w", clean, err)
 	}
 	return nil
 }

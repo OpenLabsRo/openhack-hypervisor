@@ -80,6 +80,10 @@ func EnsureRepoAtTag(repoURL, destDir, tag string) (string, error) {
 		}
 	}
 
+	if err := ensureSafeDirectory(destDir); err != nil {
+		return "", err
+	}
+
 	commit, err := HeadCommit(destDir)
 	if err != nil {
 		return "", err
@@ -198,6 +202,17 @@ func parseVersion(v string) ([]int, error) {
 	}
 
 	return nums, nil
+}
+
+func ensureSafeDirectory(path string) error {
+	clean := filepath.Clean(path)
+	cmd := exec.Command("git", "config", "--global", "--add", "safe.directory", clean)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to add safe.directory for %s: %w", clean, err)
+	}
+	return nil
 }
 
 func compareVersions(a, b []int) int {
