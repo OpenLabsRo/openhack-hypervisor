@@ -8,11 +8,16 @@ import (
 	"strings"
 )
 
+const defaultGitHome = "/var/openhack"
+
 // CloneOrPull clones a git repository from the given URL to the specified path.
 // If the repository already exists at the given path, it will be pulled.
 func CloneOrPull(repoURL, path string) error {
 	clone := func() error {
 		cmd := exec.Command("git", "clone", repoURL, path)
+		if err := applyGitEnv(cmd); err != nil {
+			return err
+		}
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("git clone failed: %w\n%s", err, output)
@@ -45,6 +50,9 @@ func CloneOrPull(repoURL, path string) error {
 
 func EnsureWorkTree(path string) error {
 	cmd := exec.Command("git", "-C", path, "rev-parse", "--is-inside-work-tree")
+	if err := applyGitEnv(cmd); err != nil {
+		return err
+	}
 	if err := cmd.Run(); err == nil {
 		return ensureSafeDirectory(path)
 	}
@@ -57,6 +65,9 @@ func EnsureWorkTree(path string) error {
 
 func EnsureRemote(path, repoURL string) error {
 	cmd := exec.Command("git", "-C", path, "remote", "get-url", "origin")
+	if err := applyGitEnv(cmd); err != nil {
+		return err
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return runGit(path, "remote", "add", "origin", repoURL)
@@ -74,6 +85,9 @@ func runGit(path string, args ...string) error {
 	cmd := exec.Command("git", append([]string{"-C", path}, args...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if err := applyGitEnv(cmd); err != nil {
+		return err
+	}
 	return cmd.Run()
 }
 
@@ -114,6 +128,9 @@ func GetTags(repoPath string) ([]string, error) {
 
 func CloneTag(repoURL, tag, path string) error {
 	cmd := exec.Command("git", "clone", "--branch", tag, repoURL, path)
+	if err := applyGitEnv(cmd); err != nil {
+		return err
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git clone failed: %w\n%s", err, output)
@@ -123,11 +140,31 @@ func CloneTag(repoURL, tag, path string) error {
 
 func ensureSafeDirectory(path string) error {
 	clean := filepath.Clean(path)
+	home := strings.TrimSpace(os.Getenv("HOME"))
+	if home == "" {
+		home = "/var/openhack"
+	}
+	if err := os.MkdirAll(home, 0o755); err != nil && !os.IsPermission(err) {
+		return fmt.Errorf("failed to ensure HOME directory %s: %w", home, err)
+	}
 	cmd := exec.Command("git", "config", "--global", "--add", "safe.directory", clean)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if err := applyGitEnv(cmd); err != nil {
+		return err
+	}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to mark %s as a safe git directory: %w", clean, err)
 	}
+	return nil
+}
+
+func applyGitEnv(cmd *exec.Cmd) error {
+	home := strings.TrimSpace(os.Getenv("HOME"))
+	if home == "" {
+		home = defaultGitHome
+	}
+	if err := os.MkdirAll(home, 0o755); err != nil && !os.IsPermission(err) {
+		return fmt.Errorf("failed to ensure HOME directory %s: %w", home, err)
+	}
+	cmd.Env = append(os.Environ(), fmt.Sprintf("HOME=%s", home))
 	return nil
 }

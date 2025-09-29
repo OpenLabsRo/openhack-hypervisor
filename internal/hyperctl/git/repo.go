@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+const defaultGitHome = "/var/openhack"
+
 // LatestRemoteTag returns the newest tag (by semantic version) and its commit hash.
 // Tags are expected to follow the format prefixYY.MM.DD.B (e.g., v24.09.24.0).
 func LatestRemoteTag(repoURL, prefix string) (tag, commit string, err error) {
@@ -53,18 +55,27 @@ func EnsureRepoAtTag(repoURL, destDir, tag string) (string, error) {
 		cmd := exec.Command("git", "-C", destDir, "fetch", "--tags", "origin")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		if err := applyGitEnv(cmd); err != nil {
+			return "", err
+		}
 		if err := cmd.Run(); err != nil {
 			return "", fmt.Errorf("git fetch failed: %w", err)
 		}
 		cmd = exec.Command("git", "-C", destDir, "checkout", tag)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		if err := applyGitEnv(cmd); err != nil {
+			return "", err
+		}
 		if err := cmd.Run(); err != nil {
 			return "", fmt.Errorf("git checkout %s failed: %w", tag, err)
 		}
 		cmd = exec.Command("git", "-C", destDir, "reset", "--hard", tag)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		if err := applyGitEnv(cmd); err != nil {
+			return "", err
+		}
 		if err := cmd.Run(); err != nil {
 			return "", fmt.Errorf("git reset --hard %s failed: %w", tag, err)
 		}
@@ -75,6 +86,9 @@ func EnsureRepoAtTag(repoURL, destDir, tag string) (string, error) {
 		cmd := exec.Command("git", "clone", "--quiet", "--branch", tag, "--single-branch", repoURL, destDir)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		if err := applyGitEnv(cmd); err != nil {
+			return "", err
+		}
 		if err := cmd.Run(); err != nil {
 			return "", fmt.Errorf("git clone failed: %w", err)
 		}
@@ -238,4 +252,16 @@ func compareVersions(a, b []int) int {
 		}
 	}
 	return 0
+}
+
+func applyGitEnv(cmd *exec.Cmd) error {
+	home := strings.TrimSpace(os.Getenv("HOME"))
+	if home == "" {
+		home = defaultGitHome
+	}
+	if err := os.MkdirAll(home, 0o755); err != nil && !os.IsPermission(err) {
+		return fmt.Errorf("failed to ensure HOME directory %s: %w", home, err)
+	}
+	cmd.Env = append(os.Environ(), fmt.Sprintf("HOME=%s", home))
+	return nil
 }

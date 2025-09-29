@@ -21,6 +21,8 @@ func main() {
 
 	flag.Parse()
 
+	ensureHome()
+
 	deploy := strings.TrimSpace(*deployment)
 	if deploy == "" {
 		args := flag.Args()
@@ -49,4 +51,16 @@ func main() {
 	}); err != nil {
 		log.Fatalf("Error listening on port %s: %v", port, err)
 	}
+}
+
+func ensureHome() {
+	home := strings.TrimSpace(os.Getenv("HOME"))
+	if home == "" {
+		home = "/var/openhack"
+	}
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		log.Printf("warning: unable to create HOME directory %s: %v", home, err)
+		return
+	}
+	_ = os.Setenv("HOME", home)
 }
