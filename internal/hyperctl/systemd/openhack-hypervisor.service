@@ -17,7 +17,7 @@ StartLimitIntervalSec=30
 StartLimitBurst=10
 StandardOutput=journal
 StandardError=journal
-Environment="PATH={{.GoPath}}/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 Environment=GODEBUG=madvdontneed=1
 
 [Install]

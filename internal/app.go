@@ -4,10 +4,7 @@ import (
 	"hypervisor/internal/db"
 	"hypervisor/internal/env"
 	"hypervisor/internal/events"
-	"hypervisor/internal/gitcommits"
-	"hypervisor/internal/githubhooks"
 	"hypervisor/internal/hyperusers"
-	releases_api "hypervisor/internal/releases/api"
 	"log"
 	"strings"
 
@@ -48,9 +45,6 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	})
 
 	hyperusers.Routes(hypervisor)
-	githubhooks.Routes(hypervisor)
-	gitcommits.Routes(hypervisor)
-	releases_api.Routes(hypervisor)
 
 	return app
 }

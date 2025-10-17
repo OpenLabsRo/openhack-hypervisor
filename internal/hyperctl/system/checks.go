@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 // ErrMissingDependency indicates that a required binary could not be found.
@@ -44,10 +45,31 @@ func EnsureRedisAvailable() error {
 	return nil
 }
 
-// EnsureMongoAvailable validates that mongod binary is installed.
-func EnsureMongoAvailable() error {
-	if err := CheckBinary("mongod"); err != nil {
-		return err
+// CheckPrerequisites verifies that all required system components are available.
+func CheckPrerequisites() error {
+	fmt.Println("Checking systemctl availability...")
+	if err := EnsureSystemctlAccessible(); err != nil {
+		return fmt.Errorf("systemctl unavailable: %w", err)
 	}
+	fmt.Println("systemctl is available")
+
+	fmt.Println("Checking redis-server availability...")
+	if err := EnsureRedisAvailable(); err != nil {
+		return fmt.Errorf("redis missing: %w", err)
+	}
+	fmt.Println("redis-server is available")
+
+	editor := ResolveEditor()
+	editorBinary := editor
+	if fields := strings.Fields(editor); len(fields) > 0 {
+		editorBinary = fields[0]
+	}
+
+	fmt.Printf("Checking editor %q...\n", editorBinary)
+	if err := CheckBinary(editorBinary); err != nil {
+		return fmt.Errorf("editor %q not found: %w", editorBinary, err)
+	}
+	fmt.Printf("Editor %q is available\n", editorBinary)
+
 	return nil
 }

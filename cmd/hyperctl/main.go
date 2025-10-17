@@ -26,6 +26,8 @@ func main() {
 		err = commands.RunVersion(args)
 	case "setup":
 		err = commands.RunSetup(args)
+	case "hiroshima":
+		err = commands.RunHiroshima(args)
 	default:
 		fmt.Fprintf(os.Stderr, "hyperctl: unknown command %q\n", cmd)
 		commands.PrintUsage()

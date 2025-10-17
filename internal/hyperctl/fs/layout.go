@@ -98,6 +98,20 @@ func createDir(path string) error {
 	return nil
 }
 
+func RemoveDir(path string) error {
+	if err := os.RemoveAll(path); err != nil {
+		if !errors.Is(err, os.ErrPermission) && !os.IsPermission(err) {
+			return fmt.Errorf("failed to remove %s: %w", path, err)
+		}
+
+		if err := runSudo("rm", "-rf", path); err != nil {
+			return fmt.Errorf("sudo rm -rf %s: %w", path, err)
+		}
+	}
+
+	return nil
+}
+
 func runSudo(args ...string) error {
 	cmd := exec.Command("sudo", args...)
 	cmd.Stdout = os.Stdout

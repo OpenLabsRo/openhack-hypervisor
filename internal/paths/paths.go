@@ -29,6 +29,9 @@ const (
 
 	// OpenHackEnvDir contains environment configuration shared with backend builds.
 	OpenHackEnvDir = OpenHackBaseDir + "/env"
+
+	// SystemdUnitDir is the directory where systemd unit files are stored.
+	SystemdUnitDir = "/lib/systemd/system"
 )
 
 // HypervisorPath joins one or more path segments underneath HypervisorBaseDir.

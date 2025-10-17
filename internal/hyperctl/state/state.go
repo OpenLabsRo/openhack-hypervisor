@@ -14,8 +14,6 @@ import (
 // State represents the persisted hyperctl installation metadata.
 type State struct {
 	Version   string    `json:"version"`
-	Tag       string    `json:"tag"`
-	Commit    string    `json:"commit"`
 	BuildPath string    `json:"build_path,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

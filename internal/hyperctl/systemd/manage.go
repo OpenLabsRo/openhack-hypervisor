@@ -9,10 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
-
-const systemdUnitDir = "/lib/systemd/system"
 
 // ServiceConfig carries values rendered into the systemd unit template.
 type ServiceConfig struct {
@@ -21,7 +20,6 @@ type ServiceConfig struct {
 	Port       string
 	EnvRoot    string
 	Version    string
-	GoPath     string
 }
 
 // InstallHypervisorService writes the hypervisor unit file and reloads systemd.
@@ -63,7 +61,7 @@ func writeHypervisorUnit(cfg ServiceConfig) error {
 		return fmt.Errorf("failed to render unit template: %w", err)
 	}
 
-	target := filepath.Join(systemdUnitDir, HypervisorServiceName)
+	target := filepath.Join(paths.SystemdUnitDir, HypervisorServiceName)
 	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 		if !errors.Is(err, os.ErrPermission) && !os.IsPermission(err) {
 			return fmt.Errorf("failed to remove existing unit file: %w", err)
@@ -145,11 +143,48 @@ func StopHypervisorService() error {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			if exitErr.ExitCode() == 5 {
-				return nil
+				return nil // Service not loaded, ignore
 			}
 		}
 		return fmt.Errorf("systemctl stop failed: %w", err)
 	}
+	return nil
+}
 
+// DisableHypervisorService disables the hypervisor service.
+func DisableHypervisorService() error {
+	cmd := exec.Command("sudo", "systemctl", "disable", HypervisorServiceName)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// RemoveServiceFile removes the systemd service file.
+func RemoveServiceFile() error {
+	cmd := exec.Command("sudo", "rm", "-f", "/lib/systemd/system/"+HypervisorServiceName)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// ReloadSystemd reloads the systemd daemon.
+func ReloadSystemd() error {
+	cmd := exec.Command("sudo", "systemctl", "daemon-reload")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// CheckServiceStatus verifies that the hypervisor service is active.
+func CheckServiceStatus() error {
+	cmd := exec.Command("systemctl", "is-active", HypervisorServiceName)
+	output, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	status := strings.TrimSpace(string(output))
+	if status != "active" {
+		return fmt.Errorf("service not active: %s", status)
+	}
 	return nil
 }
