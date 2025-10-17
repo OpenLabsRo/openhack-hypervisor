@@ -44,7 +44,7 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	})
 
 	hypervisor.Get("/version", func(c fiber.Ctx) error {
-		return c.SendString(env.VERSION)
+		return c.SendString("v" + env.VERSION)
 	})
 
 	hyperusers.Routes(hypervisor)

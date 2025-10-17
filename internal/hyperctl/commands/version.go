@@ -26,6 +26,6 @@ func RunVersion(args []string) error {
 		return err
 	}
 
-	fmt.Println(version)
+	fmt.Println("v" + version)
 	return nil
 }

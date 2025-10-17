@@ -13,6 +13,7 @@ import (
 
 	"hypervisor/internal/hyperctl/build"
 	fsops "hypervisor/internal/hyperctl/fs"
+	"hypervisor/internal/hyperctl/state"
 	"hypervisor/internal/hyperctl/system"
 	"hypervisor/internal/hyperctl/systemd"
 	"hypervisor/internal/paths"
@@ -97,6 +98,15 @@ func RunSetup(args []string) error {
 		return err
 	}
 	fmt.Println("Systemd unit installed")
+
+	fmt.Println("Persisting installation state...")
+	if err := state.Save(state.State{
+		Version:   buildResult.Version,
+		BuildPath: buildResult.BinaryPath,
+	}); err != nil {
+		return err
+	}
+	fmt.Println("State saved")
 
 	fmt.Println("Reloading systemd...")
 	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
