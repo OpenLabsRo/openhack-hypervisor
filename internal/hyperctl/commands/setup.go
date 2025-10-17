@@ -59,21 +59,15 @@ func RunSetup(args []string) error {
 	fmt.Println("Cloning the project...")
 	var repoDir string
 	if *dev {
-		repoDir = filepath.Join(paths.HypervisorReposDir, "main")
-		fmt.Println("Development mode: copying current project to", repoDir)
-		if err := exec.Command("rm", "-rf", repoDir).Run(); err != nil {
-			return fmt.Errorf("failed to clean repo dir: %w", err)
-		}
-		if err := exec.Command("cp", "-r", ".", repoDir).Run(); err != nil {
-			return fmt.Errorf("failed to copy project: %w", err)
-		}
+		repoDir = "."
+		fmt.Println("Development mode: using current directory")
 	} else {
 		repoDir = filepath.Join(paths.HypervisorReposDir, "main")
 		if err := backendgit.CloneOrPull(hypervisorRepoURL, repoDir); err != nil {
 			return fmt.Errorf("failed to clone project: %w", err)
 		}
+		fmt.Printf("Project cloned to %s\n", repoDir)
 	}
-	fmt.Printf("Project ready at %s\n", repoDir)
 
 	fmt.Println("Testing the code...")
 	fmt.Println("========== RUNNING TESTS ==========")
