@@ -37,7 +37,7 @@ func Run(repoDir, outputDir string) (Result, error) {
 		return Result{}, fmt.Errorf("BUILD script not found: %w", err)
 	}
 
-	cmd := exec.Command(buildScript, "--output", outputDir)
+	cmd := exec.Command("bash", buildScript, "--output", outputDir)
 	cmd.Dir = repoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -6,15 +6,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"hypervisor/internal/hyperctl/build"
 	fsops "hypervisor/internal/hyperctl/fs"
-	hyperctlgit "hypervisor/internal/hyperctl/git"
-	"hypervisor/internal/hyperctl/state"
 	"hypervisor/internal/hyperctl/system"
 	"hypervisor/internal/hyperctl/systemd"
 	"hypervisor/internal/paths"
@@ -23,15 +21,14 @@ import (
 )
 
 const (
-	hypervisorRepoURL      = "https://github.com/OpenLabsRo/openhack-hypervisor"
-	openHackBackendRepoURL = "https://github.com/openlabsro/openhack-backend.git"
-	openHackBackendRepoDir = "backend"
+	hypervisorRepoURL = "https://github.com/OpenLabsRo/openhack-hypervisor"
 )
 
 // RunSetup handles the `hyperctl setup` subcommand.
 func RunSetup(args []string) error {
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	dev := fs.Bool("dev", false, "Development mode: use current directory instead of cloning")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -59,67 +56,35 @@ func RunSetup(args []string) error {
 		return err
 	}
 
-	tagInput := ""
-	var tagName string
-	var commitHash string
-	var err error
-
-	if tagInput == "" {
-		fmt.Println("Resolving latest release tag...")
-		tagName, commitHash, err = hyperctlgit.LatestRemoteTag(hypervisorRepoURL, "v")
-		if err != nil {
-			return fmt.Errorf("failed to determine latest tag: %w", err)
-		}
+	fmt.Println("Cloning the project...")
+	var repoDir string
+	if *dev {
+		repoDir = "."
+		fmt.Println("Development mode: using current directory")
 	} else {
-		tagName = normalizeTag(tagInput)
-		fmt.Printf("Resolving commit for tag %s...\n", tagName)
-		commitHash, err = hyperctlgit.TagCommit(hypervisorRepoURL, tagName)
-		if err != nil {
-			return fmt.Errorf("failed to resolve commit for %s: %w", tagName, err)
+		repoDir = filepath.Join(paths.HypervisorReposDir, "main")
+		if err := backendgit.CloneOrPull(hypervisorRepoURL, repoDir); err != nil {
+			return fmt.Errorf("failed to clone project: %w", err)
 		}
+		fmt.Printf("Project cloned to %s\n", repoDir)
 	}
 
-	version := strings.TrimPrefix(tagName, "v")
-	fmt.Printf("Selected version %s (tag %s, commit %s)\n", version, tagName, commitHash)
-
-	repoDir := filepath.Join(paths.HypervisorReposDir, version)
-	fmt.Printf("Ensuring repository checkout at %s...\n", repoDir)
-	checkoutCommit, err := hyperctlgit.EnsureRepoAtTag(hypervisorRepoURL, repoDir, tagName)
-	if err != nil {
-		return err
+	if !*dev {
+		fmt.Println("Testing the code...")
+		fmt.Println("========== RUNNING TESTS ==========")
+		if err := runTest(repoDir); err != nil {
+			fmt.Println("========== TESTS FAILED ==========")
+			return fmt.Errorf("tests failed: %w", err)
+		}
+		fmt.Println("========== TESTS PASSED ==========")
 	}
-	fmt.Printf("Repository ready at commit %s\n", checkoutCommit)
-	commitHash = checkoutCommit
 
-	fmt.Printf("Running BUILD script into %s...\n", paths.HypervisorBuildsDir)
+	fmt.Printf("Building the code into %s...\n", paths.HypervisorBuildsDir)
 	buildResult, err := build.Run(repoDir, paths.HypervisorBuildsDir)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Build complete: %s\n", buildResult.BinaryPath)
-
-	fmt.Println("Stopping existing hypervisor service (if running)...")
-	if err := systemd.StopHypervisorService(); err != nil {
-		return err
-	}
-	fmt.Println("Hypervisor service stopped")
-
-	fmt.Printf("Updating current build symlink to %s...\n", buildResult.BinaryPath)
-	if err := updateCurrentSymlink(buildResult.BinaryPath); err != nil {
-		return err
-	}
-	fmt.Println("Current build updated")
-
-	fmt.Println("Persisting installation state...")
-	if err := state.Save(state.State{
-		Version:   buildResult.Version,
-		Tag:       tagName,
-		Commit:    commitHash,
-		BuildPath: buildResult.BinaryPath,
-	}); err != nil {
-		return err
-	}
-	fmt.Println("State saved")
 
 	fmt.Println("Installing systemd unit for hypervisor...")
 	cfg := systemd.ServiceConfig{
@@ -133,43 +98,63 @@ func RunSetup(args []string) error {
 	if err := systemd.InstallHypervisorService(cfg); err != nil {
 		return err
 	}
-	fmt.Println("Systemd unit installed and service restarted")
+	fmt.Println("Systemd unit installed")
 
-	openHackEnvPath := fsops.OpenHackEnvPath()
-	if err := fsops.EnsureEnvDirFor(openHackEnvPath); err != nil {
-		return err
+	fmt.Println("Reloading systemd...")
+	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
+		return fmt.Errorf("failed to reload systemd: %w", err)
 	}
-	if err := fsops.EditEnvFileIfMissing("OpenHack", openHackEnvPath, editor); err != nil {
-		return err
-	}
+	fmt.Println("Systemd reloaded")
 
-	fmt.Println("Syncing OpenHack backend repository...")
-	backendRepoPath := paths.OpenHackRepoPath(openHackBackendRepoDir)
-	if err := backendgit.CloneOrPull(openHackBackendRepoURL, backendRepoPath); err != nil {
-		return fmt.Errorf("failed to sync backend repository: %w", err)
+	fmt.Println("Checking service status...")
+	if err := checkServiceStatus(); err != nil {
+		return fmt.Errorf("service status check failed: %w", err)
 	}
-	fmt.Println("OpenHack backend repository is up to date")
+	fmt.Println("Service is active")
 
-	if err := waitForServerReady(); err != nil {
-		return err
+	fmt.Println("Performing health check...")
+	if err := healthCheck(); err != nil {
+		return fmt.Errorf("health check failed: %w", err)
 	}
+	fmt.Println("Health check passed")
 
-	fmt.Printf("Setup completed successfully for version %s (commit %s).\n", buildResult.Version, commitHash)
+	fmt.Println("Setup completed successfully.")
 
 	return nil
 }
 
-func waitForServerReady() error {
-	fmt.Println("Waiting for hypervisor service to be ready...")
-	for i := 0; i < 10; i++ {
-		resp, err := http.Get("http://localhost:8080/hypervisor/ping")
-		if err == nil && resp.StatusCode == http.StatusOK {
-			fmt.Println("Hypervisor service is ready.")
-			return nil
-		}
-		time.Sleep(1 * time.Second)
+func runTest(repoDir string) error {
+	cmd := exec.Command("./TEST")
+	cmd.Dir = repoDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func checkServiceStatus() error {
+	cmd := exec.Command("systemctl", "is-active", "openhack-hypervisor")
+	output, err := cmd.Output()
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("hypervisor service is not ready after 10 seconds")
+	status := strings.TrimSpace(string(output))
+	if status != "active" {
+		return fmt.Errorf("service not active: %s", status)
+	}
+	return nil
+}
+
+func healthCheck() error {
+	url := "http://localhost:8080/hypervisor/ping"
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("health check failed with status: %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func checkPrerequisites() error {
@@ -198,40 +183,4 @@ func checkPrerequisites() error {
 	fmt.Printf("Editor %q is available\n", editorBinary)
 
 	return nil
-}
-
-func updateCurrentSymlink(target string) error {
-	link := filepath.Join(paths.HypervisorBuildsDir, "current")
-	tmp := link + ".tmp"
-
-	if err := os.Remove(tmp); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove temp symlink: %w", err)
-	}
-
-	if err := os.Symlink(target, tmp); err != nil {
-		return fmt.Errorf("failed to create temp symlink: %w", err)
-	}
-
-	if err := os.Remove(link); err != nil && !os.IsNotExist(err) {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("failed to replace current symlink: %w", err)
-	}
-
-	if err := os.Rename(tmp, link); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("failed to finalize current symlink: %w", err)
-	}
-
-	return nil
-}
-
-func normalizeTag(tag string) string {
-	tag = strings.TrimSpace(tag)
-	if tag == "" {
-		return tag
-	}
-	if !strings.HasPrefix(tag, "v") {
-		tag = "v" + tag
-	}
-	return tag
 }

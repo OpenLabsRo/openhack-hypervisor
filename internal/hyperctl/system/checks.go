@@ -43,3 +43,11 @@ func EnsureRedisAvailable() error {
 	}
 	return nil
 }
+
+// EnsureMongoAvailable validates that mongod binary is installed.
+func EnsureMongoAvailable() error {
+	if err := CheckBinary("mongod"); err != nil {
+		return err
+	}
+	return nil
+}

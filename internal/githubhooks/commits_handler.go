@@ -15,6 +15,7 @@ import (
 	"hypervisor/internal/errmsg"
 	"hypervisor/internal/events"
 	"hypervisor/internal/models"
+	releases_db "hypervisor/internal/releases/db"
 	"hypervisor/internal/transformer"
 	"hypervisor/internal/utils"
 
@@ -99,28 +100,23 @@ func commitsHandler(c fiber.Ctx) error {
 	if len(pushPayload.Commits) == 0 {
 		if strings.HasPrefix(pushPayload.Ref, "refs/tags/") {
 			tag := strings.TrimPrefix(pushPayload.Ref, "refs/tags/")
-			commit := models.GitCommit{
-				DeliveryID: deliveryID,
-				Ref:        pushPayload.Ref,
-				SHA:        tag,
-				Message:    "tag: " + tag,
-				Timestamp:  time.Now(),
-			}
-
-			if err := upsertCommit(commit); err != nil {
-				return utils.StatusError(c, errmsg.InternalServerError(err))
-			}
-
-			if err := transformer.Transform(commit); err != nil {
-				log.Printf("failed to transform commit %s into a release: %v", commit.SHA, err)
+			if strings.HasPrefix(tag, "v") {
+				release := models.Release{
+					Tag:       tag,
+					Status:    "new",
+					CreatedAt: time.Now(),
+				}
+				if err := releases_db.Create(release); err != nil {
+					return utils.StatusError(c, errmsg.InternalServerError(err))
+				}
 			}
 
 			if events.Em != nil {
 				events.Em.GitHubCommitReceived(
 					deliveryID,
-					commit.SHA,
-					commit.Ref,
-					commit.Message,
+					tag,
+					pushPayload.Ref,
+					"tag: "+tag,
 				)
 			}
 		}
