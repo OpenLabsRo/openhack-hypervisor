@@ -59,25 +59,29 @@ func RunSetup(args []string) error {
 	fmt.Println("Cloning the project...")
 	var repoDir string
 	if *dev {
-		repoDir = "."
-		fmt.Println("Development mode: using current directory")
+		repoDir = filepath.Join(paths.HypervisorReposDir, "main")
+		fmt.Println("Development mode: copying current project to", repoDir)
+		if err := exec.Command("rm", "-rf", repoDir).Run(); err != nil {
+			return fmt.Errorf("failed to clean repo dir: %w", err)
+		}
+		if err := exec.Command("cp", "-r", ".", repoDir).Run(); err != nil {
+			return fmt.Errorf("failed to copy project: %w", err)
+		}
 	} else {
 		repoDir = filepath.Join(paths.HypervisorReposDir, "main")
 		if err := backendgit.CloneOrPull(hypervisorRepoURL, repoDir); err != nil {
 			return fmt.Errorf("failed to clone project: %w", err)
 		}
-		fmt.Printf("Project cloned to %s\n", repoDir)
 	}
+	fmt.Printf("Project ready at %s\n", repoDir)
 
-	if !*dev {
-		fmt.Println("Testing the code...")
-		fmt.Println("========== RUNNING TESTS ==========")
-		if err := runTest(repoDir); err != nil {
-			fmt.Println("========== TESTS FAILED ==========")
-			return fmt.Errorf("tests failed: %w", err)
-		}
-		fmt.Println("========== TESTS PASSED ==========")
+	fmt.Println("Testing the code...")
+	fmt.Println("========== RUNNING TESTS ==========")
+	if err := runTest(repoDir); err != nil {
+		fmt.Println("========== TESTS FAILED ==========")
+		return fmt.Errorf("tests failed: %w", err)
 	}
+	fmt.Println("========== TESTS PASSED ==========")
 
 	fmt.Printf("Building the code into %s...\n", paths.HypervisorBuildsDir)
 	buildResult, err := build.Run(repoDir, paths.HypervisorBuildsDir)
@@ -124,7 +128,7 @@ func RunSetup(args []string) error {
 }
 
 func runTest(repoDir string) error {
-	cmd := exec.Command("./TEST")
+	cmd := exec.Command("./TEST", "--env-root", paths.HypervisorEnvDir)
 	cmd.Dir = repoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
