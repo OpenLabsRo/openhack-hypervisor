@@ -52,7 +52,7 @@ func (hu *HyperUser) ParseToken(token string) error {
 	return nil
 }
 
-func AccountMiddleware(c fiber.Ctx) error {
+func HyperUserMiddleware(c fiber.Ctx) error {
 	authHeader := strings.TrimSpace(c.Get("Authorization"))
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		return utils.StatusError(c, errmsg.HyperUserNoToken)

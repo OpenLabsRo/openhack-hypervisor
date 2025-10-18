@@ -1,116 +1,422 @@
-# Hypervisor Deployment Plan
+# ⚙️ OpenHack Hypervisor — Final Contract Specification
 
-## Goals
+**Version:** 2025-10-17  
+**Purpose:** automate build, test, deploy, routing, and lifecycle management of OpenHack backend services with full control from a web interface.  
+**Tech stack:** Go (Fiber + MongoDB) + systemd.  
+**Public base URL:** `https://DOMAIN/hypervisor/*`
 
-- Proxies public traffic to the latest healthy OpenHack backend using blue/green slots.
-- Automates build, test, deploy, and traffic switching using GitHub webhooks + manual promotion.
-- Enforces hyperuser authentication (mirrors backend superuser flow) without storing long-lived tokens.
-- Survives host reboots via systemd; manages backend instances without manual sudo interaction.
+---
 
-## Service Layout
+## 1. Core concepts
 
-- **Hypervisor daemon (Fiber)**
+- **Release** — immutable build artifact of a tagged commit.
+- **Stage** — configuration workspace (`version + envTag`) that owns the environment file, repo clone, test history, and lifecycle status (`pre`, `active`, `promoted`).
+- **Stage session** — immutable snapshot of an env submission to a stage; sessions accumulate history and reference the stage they belong to.
+- **Stage test result** — outcome of a manual test run (started via API, streamed over WebSocket) linked to both the stage and the session that triggered it.
+- **Deployment** — running instance of a stage, uniquely identified by `vVERSION-ENVTAG` (e.g. `v25.10.17.0-prod`); deployments are created only from `active` stages.
+- **Event** — structured log entry emitted on every operation (for auditing and correlation).
+- **Routing** — URL prefixes mapped to deployments; `/` points to the promoted “main” one.
+- **Hypervisor API** — all control routes served under `/hypervisor`.
 
-  - Runs under a system-level systemd unit (`openhack-hypervisor.service`).
-  - Terminates TLS/HTTP, forwards requests to the active backend color.
-  - Stores state in MongoDB `hypervisor` database: release metadata, deployment records, GitHub events, hyperuser sessions.
-  - Exposes APIs for webhook ingestion, deployment control, status/health, hyperuser login, and to view git commits and releases.
-  - On startup reconciles DB state, restarts the previously active color, verifies health, and resumes proxying.
+---
 
-- **Backend colors (blue/green)**
+## 2. Filesystem layout
 
-  - Managed by the hypervisor via user-level systemd units (`openhack-backend-blue.service`, `...-green.service`).
-  - Each unit references a release-specific working directory and artifact built by the hypervisor.
-  - Ports stay stable per color (e.g., blue `8001`, green `8002`). Hypervisor flips traffic by switching the active color in its reverse proxy layer.
-  - Health checks: readiness probe (`/ping`/`/version`), optional smoke tests before promotion, continuous liveness polling for automatic restart/redploy.
+```
+/var/openhack/
+  repos/
+    v25.10.17.0/               # cloned at tag
+  builds/
+    v25.10.17.0                # compiled binary
+  env/
+    template/.env              # canonical staging template
+    v25.10.17.0-dev/.env
+    v25.10.17.0-prod/.env
+  runtime/
+    logs/
+    tmp/
 
-- **Command-line tools**
-  - `hyperctl`: server-resident utility. `setup` clones/builds/deploys the daemon, writes/upgrades systemd units, seeds config, enables lingering, and triggers an initial sync of git tags; `upgrade` pulls and rebuilds the hypervisor before restarting it; `restart`/`status` (and optional `logs`, `reconcile`) wrap systemd and local health checks. Runs locally and requires no auth.
-  - `hyper-cli`: operator CLI used from remote machines. Authenticates as hyperuser for every session, lists release tags, inspects build/test logs, stages builds, and promotes or rolls back traffic via `switch`.
-  - Future additions: `hyper-cli logs`, `hyper-cli rollback`, `hyper-cli config` for expanded remote control.
+/etc/openhack/versions/
+  v25.10.17.0-dev/env          # BIN/DEPLOYMENT/PORT/ENV_ROOT/APP_VERSION + user env
+```
 
-## Release & Deployment Flow
+Per-deployment environment files live under `/var/openhack/env`. There is a single canonical template at `/var/openhack/env/template/.env`. Each deployment uses exactly one environment file derived from the template; the file is located under `/var/openhack/env/<deployment-id>/.env`.
 
-1. **Git tag**: Developers run the new `RELEASE` script locally.
+---
 
-   - Auto-bumps `VERSION` (format `YY.MM.DD.B`, zero-indexed per day) and commits/tags the change (tag `v<version>`).
-   - Script supports manual version overrides and `--no-git` dry runs.
+## 3. Build & test conventions
 
-2. **GitHub webhook**: Hypervisor listens for push/tag webhook events.
+### BUILD
 
-   - Validates signature, records raw commit data in the `git_commits` collection.
-   - If the event is for a release tag (e.g., `v1.2.3`), it transforms the commit into a `Release` object and saves it to the `releases` collection.
+```
+./BUILD [--output DIR]
+# Example:
+./BUILD --output /var/openhack/builds
+```
 
-3. **Operator selects tag** using `hyper-cli` or the dashboard.
+- Reads local `VERSION` file.
+- Builds executable at `${OUTPUT}/${VERSION}` (e.g. `/var/openhack/builds/v25.10.17.0`).
+- Exit `0` on success.
 
-   - Hypervisor clones repo into `/var/openhack/repos/<tag>` and checks out target SHA.
-   - Runs repo’s `BUILD` script to produce `/var/openhack/artifacts/<tag>/<tag>` binary.
-   - Executes repo’s `TEST` script with flags `--env-root`/`--app-version`; stores logs and exit status.
-   - On success, updates inactive color’s systemd unit to point at new artifact and env root, restarts service, confirms health checks pass.
+### TEST
 
-4. **Traffic switch**: Once the new color is marked healthy, operator issues `hyper-cli switch`.
+```
+./TEST [--env-root PATH] [--app-version VERSION]
+# Example:
+./TEST --env-root /var/openhack/env/v25.10.17.0-dev --app-version v25.10.17.0-dev
+```
 
-   - Hypervisor updates proxy routing to the new color, drains old color, and keeps it warm for instant rollback.
+- Reads env from `${PATH}/.env`.
+- Prints logs to stdout/stderr.
+- Exit `0` on success.
+- Tests run only when explicitly started through the stage testing API; creating or updating a stage does not auto-run tests.
 
-5. **Rollback**: `hyper-cli switch --to <previous>` reassigns traffic to prior color if needed. Hypervisor retains history so previous version can be reactivated rapidly.
+---
 
-## Environment & Configuration
+## 4. Executable runtime flags
 
-- Hypervisor-managed systemd units pass flags instead of environment files:
-  - `ExecStart=/var/openhack/artifacts/<tag>/<tag> --deployment prod --port 8001 --env-root /var/openhack/env --app-version <tag>`.
-- Shared `.env` lives at `/var/openhack/env/.env`. Hypervisor (and RUNDEV/TEST scripts) load this by passing `--env-root` flag.
-- Per-release adjustments (if needed) can be encoded in version-specific env directories, but default flow uses one global env root.
+```
+--deployment <envTag>
+--port <port>
+--env-root </var/openhack/env/vTAG-ENV>
+--app-version <vTAG-ENV>
+```
 
-## Backend Adjustments (openhack-backend)
+---
 
-- **Environment Loader**
+## 5. systemd integration
 
-  - `internal/env/env.go` now accepts flags (`--env-root`, `--app-version`) and defaults to repo root for dev/test runs. Superuser defaults remain baked in for tests.
-  - `env.Init` loads `.env` from the provided root and version from either flag or `VERSION` file.
+Unit: `openhack-backend@.service` (installed into the systemd unit directory defined in the codebase via `paths.SystemdUnitDir`)
 
-- **Entry Point**
+```
+[Unit]
+Description=OpenHack backend %i
+After=network-online.target
+Wants=network-online.target
 
-  - `cmd/server/main.go` uses Go flags for deployment, port, env root, and app version. Port must be supplied by caller (no implicit defaults).
-  - `/version` endpoint reports the supplied version metadata.
+[Service]
+Type=exec
 
-- **Helper Scripts**
+# The environment file for an individual deployment lives at /var/openhack/env/<deployment-id>/.env
+EnvironmentFile=/var/openhack/env/%i/.env
+ExecStart=${BIN} \
+ --deployment ${DEPLOYMENT} \
+ --port ${PORT} \
+ --env-root ${ENV_ROOT} \
+ --app-version ${APP_VERSION}
+Restart=always
+RestartSec=1
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+StateDirectory=openhack-%i
+RuntimeDirectory=openhack-%i
 
-  - `RUNDEV`: launches `go run` with dev profile, port 9001, repo env root, and version from `VERSION`.
-  - `TEST`: forwards optional `--env-root`/`--app-version` flags to the test suite; defaults point to repo assets. Resets Redis counter before tests.
-  - `BUILD`: compiles the backend binary with release flags, producing `<project-root>/<version>` by default or `<output>/<version>` when `--output DIR` is provided.
-  - `RELEASE`: bumps or sets `VERSION` (format `YY.MM.DD.B`), writes commit/tag/ push by default (opt-out via `--no-git`). Tag format `v<version>`.
+[Install]
+WantedBy=multi-user.target
+```
 
-- **Testing changes**
+Environment example:
 
-  - Tests now register the shared env flags, run under package-specific `TestMain` (e.g., `test/superusers/test_main.go`) to build an app instance.
-  - Suites refactored to use shared setup helpers instead of pseudo `TestMain` functions.
+```
+BIN=/var/openhack/builds/v25.10.17.0
+DEPLOYMENT=dev
+PORT=20037
+ENV_ROOT=/var/openhack/env/v25.10.17.0-dev
+APP_VERSION=v25.10.17.0-dev
+# --- begin user env ---
+PREFORK=false
+MONGO_URI=mongodb+srv://...
+JWT_SECRET=abcd
+BADGE_PILES=6
+# --- end user env ---
+```
 
-- **Misc**
-  - `api_spec.yaml` refreshed; `contract.yaml` replaced/renamed.
-  - `.air.toml` updated to run `./RUNDEV` directly instead of rebuilding.
-  - `.gitignore` adjusted (removed `.env` ignore to keep repo-local env?).
+---
 
-## Systemd Strategy
+## 6. MongoDB collections
 
-- Hypervisor service (`/etc/systemd/system/openhack-hypervisor.service`) handles restarts; `hyperctl setup` installs this unit with `ExecStart=/usr/local/bin/openhack-hypervisor --config /etc/openhack/hypervisor.yaml` and enables it on boot.
-- Blue/green units run as the deployment user via `systemctl --user`. Hypervisor (and `hyperctl setup/upgrade`) write unit files under `~/.config/systemd/user/`, run `systemctl --user daemon-reload`, and `start`/`stop`/`restart` them as deployments progress.
-- Ports: allocate fixed per color (e.g., blue 8001, green 8002, optional canary 8003). Hypervisor stores mapping in Mongo/config.
+### releases
 
-## Data & State
+```
+{
+  "id": "v25.10.17.0",
+  "sha": "abc123",
+  "artifact": { "binPath": "/var/openhack/builds/v25.10.17.0" },
+  "createdAt": "2025-10-17T13:00:00Z"
+}
+```
 
-- MongoDB `hypervisor` DB collections:
-  - `git_commits`: raw commit data from GitHub webhooks.
-  - `releases`: actionable release objects, transformed from git commits with release tags.
-  - `deployments`: current and historical blue/green assignments, active color pointer, health statuses.
-  - `hyperusers`: superuser credential mirror (hashed passwords, roles).
-  - `sessions`: issued hyperuser tokens with TTL.
-  - `github_events`: raw webhook payloads/IDs to avoid replays.
+### stages
 
-## Future Considerations
+```
+{
+  "id": "v25.10.17.0-dev",
+  "releaseId": "v25.10.17.0",
+  "envTag": "dev",
+  "status": "pre|active|promoted",
+  "envText": "PREFORK=false\n...",
+  "repoPath": "/var/openhack/repos/v25.10.17.0",
+  "latestSessionId": "ssn_Qa7",
+  "createdAt": "...",
+  "updatedAt": "...",
+  "lastTestResultId": "tr_7yQ"    # nullable; most recent manual test run
+}
+```
 
-- Add smoke test script integration to hypervisor pipeline (config-driven command per tag).
-- Track build/test logs in object storage (S3/minio) for long-term auditing.
-- Extend `hyperctl`/`hyper-cli` with log tailing, config editing, and GitHub event inspection.
-- Implement notifications for failed builds/tests (Slack/email).
+### stage_sessions
 
-This document aggregates our current plan and repository adjustments so future work on the hypervisor stack has a single reference point.
+```
+{
+  "id": "ssn_Qa7",
+  "stageId": "v25.10.17.0-dev",
+  "envText": "PREFORK=false\n...",
+  "author": "user_123",
+  "notes": "Adjusted Redis host",
+  "source": "template|manual|import",
+  "createdAt": "...",
+  "testResultId": "tr_7yQ"       # nullable reference to the test run started from this session
+}
+```
+
+### stage_test_results
+
+```
+{
+  "id": "tr_7yQ",
+  "stageId": "v25.10.17.0-dev",
+  "sessionId": "ssn_Qa7",
+  "status": "running|passed|failed|canceled|error",
+  "wsToken": "...",
+  "logPath": "/var/openhack/runtime/logs/tr_7yQ.log",
+  "startedAt": "...",
+  "finishedAt": null
+}
+```
+
+### deployments
+
+```
+{
+  "id": "v25.10.17.0-dev",
+  "stageId": "v25.10.17.0-dev",
+  "version": "v25.10.17.0",
+  "envTag": "dev",
+  "port": 20037,                  # nullable; staged deployments have no port yet
+  "status": "staged|ready|stopped|deleted",
+  "createdAt": "...",
+  "promotedAt": null
+}
+```
+
+---
+
+## 7. Event system
+
+All operations emit structured events for auditing and replay. Events are persisted to the MongoDB `events` collection by the asynchronous emitter in `internal/events`.
+
+### Event schema
+
+The canonical shape is `internal/models.Event`:
+
+```
+type Event struct {
+    TimeStamp  time.Time         `json:"timestamp" bson:"timestamp"`
+    Action     string            `json:"action" bson:"action"`
+    ActorID    string            `json:"actorID" bson:"actorID"`
+    ActorRole  string            `json:"actorRole" bson:"actorRole"`   // e.g. "hyperuser", "system"
+    TargetID   string            `json:"targetID" bson:"targetID"`
+    TargetType string            `json:"targetType" bson:"targetType"` // e.g. "stage", "deployment"
+    Props      map[string]any    `json:"props" bson:"props"`
+    Key        string            `json:"key,omitempty" bson:"key,omitempty"`
+}
+```
+
+Before persistence the emitter stamps every event with the `Europe/Bucharest` timezone so audit timelines align with operations.
+
+### Emitter behaviour
+
+- `events.Em` is initialised during application bootstrap once Mongo connectivity is available.
+- Events are buffered through an internal channel (default capacity 1000) and flushed in batches of 50 via `InsertMany`. A timer (2 s in normal deployments, 50 ms in the `test` profile) ensures periodic flushes even when the batch is not full.
+- If the buffer is saturated the emitter falls back to a synchronous `InsertOne`.
+- On shutdown `Emitter.Close()` drains the buffer to avoid data loss.
+- Convenience wrappers (`internal/events/*.go`) set consistent actor/target constants such as `ActorHyperUser`, `ActorSystem`, ensuring consumers see predictable `actorRole`/`targetType` values.
+
+Example event:
+
+```
+{
+  "timestamp": "2025-10-17T12:34:56+02:00",
+  "action": "stage.session_created",
+  "actorID": "user_123",
+  "actorRole": "hyperuser",
+  "targetID": "v25.10.17.0-dev",
+  "targetType": "stage",
+  "props": { "sessionId": "ssn_Qa7" }
+}
+```
+
+Typical events include:
+
+- `stage.prepared`, `stage.session_created`, `stage.env_updated`, `stage.failed`
+- `stage.test_started`, `stage.test_passed`, `stage.test_failed`, `stage.test_canceled`
+- `deployment.created`, `deployment.create_failed`
+- `deploy.started|ready|health_failed|stopped|deleted`
+- `promote.changed`
+- `sync.started|release_created|failed|finished`
+
+All code paths must emit via `events.Em.Emit(...)` (or the provided wrappers) to benefit from batching and schema enforcement.
+
+---
+
+## 8. API (all under `/hypervisor`)
+
+| Endpoint                                       | Description                                                                                                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /hypervisor/meta/ping`                 | Hypervisor health probe (PONG)                                                                                                                      |
+| `GET /hypervisor/meta/version`              | Running hypervisor version string                                                                                                                   |
+| `GET /hypervisor/hyperusers/whoami`          | Return the authenticated hyperuser profile (JWT required)                                                                                            |
+| `GET /releases`                              | List all releases                                                                                                                                    |
+| `POST /stages`                                 | Create a **pre-stage**: clones the release repo, seeds the template env, returns the stage (status `pre`) plus the template contents                 |
+| `GET /stages`                                  | List stages with status, latest session info, and last test summary                                                                                 |
+| `GET /stages/:stageId`                         | Inspect a single stage (current env, status timeline, last test results)                                                                            |
+| `POST /stages/:stageId/sessions`               | Submit an env snapshot; first submission moves the stage from `pre` → `active`, later submissions append history                                    |
+| `GET /stages/:stageId/sessions`                | List all sessions for the stage (immutable env history, newest first)                                                                               |
+| `POST /stages/:stageId/tests`                  | Start a manual test run for the current env; response returns `{ testResultId, wsToken }` for streaming                                             |
+| `POST /stages/:stageId/tests/:resultId/cancel` | Cancel an in-flight stage test (optional, when supported)                                                                                           |
+| `GET /.ws/stages/:stageId/tests/:resultId`     | WebSocket for live `./TEST` output associated with the stage test                                                                                   |
+| `POST /deployments`                            | Promote an `active` stage to a deployment (writes build artifacts + systemd unit, records deployment referencing `stageId`)                         |
+| `GET /deployments`                             | List active deployments                                                                                                                             |
+| `GET /deployments/main`                        | Get main deployment                                                                                                                                 |
+| `POST /deployments/:deploymentId/promote`      | Promote an existing deployment to become the main route                                                                                             |
+| `POST /deployments/:deploymentId/shutdown`     | Stop process, keep record                                                                                                                           |
+| `DELETE /deployments/:deploymentId`            | Delete deployment (`?force=true` stops first)                                                                                                       |
+| `GET /routes/main`                             | Get main route info                                                                                                                                 |
+| `PUT /routes/main`                             | Set main deployment                                                                                                                                 |
+| `POST /sync`                                   | Bulk sync commits and releases                                                                                                                      |
+| `GET /hypervisor/docs` / `GET /hypervisor/docs/doc.json` | Swagger UI + generated spec                                                                                                         |
+
+- All write routes use JWT Bearer auth.
+- WebSocket auth via `?token=` query param.
+
+---
+
+## 9. Routing behavior
+
+| URL prefix            | Target                         | Purpose         |
+| --------------------- | ------------------------------ | --------------- |
+| `/v25.10.17.0-dev/*`  | localhost:20037                | dev deployment  |
+| `/v25.10.17.0-prod/*` | localhost:20055                | prod deployment |
+| `/`                   | whichever deployment is “main” | public route    |
+
+Multiple deployments of the same version coexist.
+
+---
+
+## 10. Swagger documentation
+
+- Uses swaggo tooling; generated via `./API_SPEC` which wraps `swag init`.
+- Output lives in `internal/swagger/docs/`.
+- Served at `/hypervisor/docs` (HTML UI) and `/hypervisor/docs/doc.json` (raw spec).
+- `BasePath: /hypervisor`
+- Security: `BearerAuth` (Authorization header)
+
+---
+
+## 11. Project structure
+
+```
+openhack-hypervisor/
+├─ cmd/server/
+│  └─ main.go                 # fiber app, mount /hypervisor, swagger, routes
+├─ internal/
+│  ├─ api/                    # HTTP layer + swagger annotations (stages, deployments, tests, sync, hyperusers)
+│  ├─ core/                   # business logic (stage lifecycle, deployments, tests, routing, sync)
+│  ├─ db/                     # Mongo + Redis initialization
+│  ├─ env/                    # runtime flags/env loading
+│  ├─ events/                 # reusable event emitter
+│  ├─ hyperusers/             # authentication handlers
+│  ├─ models/                 # Mongo persistence models (stage, session, test result, deployment, release, etc.)
+│  ├─ swagger/                # embedded swagger assets + UI routes
+│  └─ utils/                  # helpers (errors, locals, ids)
+├─ API_SPEC                   # helper script to regenerate swagger docs
+├─ HYPERVISOR_DESIGN.md       # this contract
+├─ go.mod / go.sum
+└─ VERSION
+```
+
+---
+
+## 12. Environment variables
+
+These are the minimal environment variables consumed by the hypervisor and the build/test/deploy tooling. Backend deployments will additionally read their per-deployment `.env` from `/var/openhack/env/<deployment-id>/.env`.
+
+```
+HTTP_ADDR=:9090
+MONGO_URI=mongodb://127.0.0.1:27017/openhack
+MONGO_DB=openhack
+JWT_SECRET=supersecret
+PORT_RANGE_START=20000
+PORT_RANGE_END=29999
+BASE_PATH=/var/openhack
+```
+
+Required keys in backend per-deployment env files (from the confirmed decisions):
+
+- `PREFORK`
+- `MONGO_URI`
+- `JWT_SECRET`
+- `BADGE_PILES`
+
+No other keys are required by default; deployment metadata (BIN/DEPLOYMENT/PORT/ENV_ROOT/APP_VERSION) is stored in the deployment MongoDB document and encoded in systemd ExecStart args.
+
+---
+
+## 13. Status codes
+
+| Code        | Meaning                                    |
+| ----------- | ------------------------------------------ |
+| 200/201/204 | success                                    |
+| 400         | invalid input                              |
+| 401/403     | unauthorized                               |
+| 404         | not found                                  |
+| 409         | conflict (duplicate stage, active deployment, etc.) |
+| 412         | tests not passed but required              |
+| 422         | build/test/provision failed                |
+| 500         | internal error                             |
+
+---
+
+## 14. Behavioral sequence
+
+1. GitHub webhook hits `/hypervisor/hooks/github` (future feature).  
+   → Hypervisor clones repo, logs commit, builds if tag, and records `releases`. No automatic staging/promotion occurs.
+2. Operator creates a stage via `POST /stages` supplying `{ releaseId, envTag }`.  
+   → Hypervisor clones the release into the stage workspace, copies `/var/openhack/env/template/.env`, persists a `stage` with status `pre`, and returns the template env text.
+3. Operator edits the env locally, then submits it with `POST /stages/:stageId/sessions`.  
+   → Hypervisor stores a `stage_session`, updates the stage’s current env, and transitions status to `active`. Subsequent submissions append more sessions without changing the stage id.
+4. Operator may start tests at any time with `POST /stages/:stageId/tests`.  
+   → Hypervisor runs `./TEST` against the stage checkout, streams output over `/.ws/stages/:stageId/tests/:resultId`, and records a `stage_test_result` referencing both the stage and the triggering session. Tests are manual; creating a session does **not** auto-run tests.
+5. When ready, operator promotes the stage via `POST /deployments` (payload includes `stageId`).  
+   → Hypervisor ensures the stage is `active`, runs `./BUILD` if required, allocates a port, writes `/var/openhack/env/<stageId>/.env`, renders a systemd unit, starts the service, writes a `deployment` document pointing back to the stage, and marks the stage status `promoted`.
+6. Promotion to “main” continues to use `POST /deployments/:deploymentId/promote`, updating the routing configuration so `/` maps to that deployment.
+7. Further env tweaks repeat steps 3–4 on the same stage; after each successful test or review the operator may redeploy or create a new deployment from the updated stage history.
+8. Shutdown/Delete behavior matches the deployment lifecycle (stop unit, free port, remove files, mark deployment status).
+9. Bulk sync (`POST /sync`) reconciles commits/releases but leaves stages/deployments untouched.
+10. Every action routes through `internal/events`, emitting structured entries into MongoDB `events` for auditing.
+
+---
+
+## 15. Design principles
+
+- One **binary per release**, multiple **stages** (and deployments) per version.
+- Parallel environments (dev/test/prod/judge) remain isolated.
+- Deterministic builds, env-first staging.
+- Tests are operator-driven and reproducible; results are stored alongside the triggering stage session.
+- Everything observable via event log.
+- Self-contained lifecycle: release → stage → session → (optional) test → deployment → promote → retire.
+- Full Swagger documentation and REST interface under `/hypervisor`.
+- Designed for automated control from a Vercel dashboard and manual hyperuser intervention when needed.
+

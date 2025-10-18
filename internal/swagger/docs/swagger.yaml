@@ -1,0 +1,642 @@
+basePath: /hypervisor
+definitions:
+  api.StatusResponse:
+    properties:
+      status:
+        type: string
+    type: object
+  api.createStageRequest:
+    properties:
+      envTag:
+        type: string
+      releaseId:
+        type: string
+    type: object
+  api.createStageSessionRequest:
+    properties:
+      author:
+        type: string
+      envText:
+        type: string
+      notes:
+        type: string
+      source:
+        type: string
+    type: object
+  api.listStagesResponse:
+    properties:
+      stages:
+        items:
+          $ref: '#/definitions/models.Stage'
+        type: array
+    type: object
+  api.promoteStageRequest:
+    properties:
+      stageId:
+        type: string
+    type: object
+  api.stageSessionResponse:
+    properties:
+      session:
+        $ref: '#/definitions/models.StageSession'
+      stage:
+        $ref: '#/definitions/models.Stage'
+    type: object
+  api.startStageTestRequest:
+    properties:
+      sessionId:
+        type: string
+    type: object
+  errmsg._DeploymentInvalidRequest:
+    properties:
+      message:
+        example: invalid deployment request payload
+        type: string
+      statusCode:
+        example: 400
+        type: integer
+    type: object
+  errmsg._HyperUserInvalidPayload:
+    properties:
+      message:
+        example: username and password must be provided
+        type: string
+      statusCode:
+        example: 400
+        type: integer
+    type: object
+  errmsg._HyperUserNoToken:
+    properties:
+      message:
+        example: no token has been provided
+        type: string
+      statusCode:
+        example: 401
+        type: integer
+    type: object
+  errmsg._HyperUserNotExists:
+    properties:
+      message:
+        example: hyperuser does not exist
+        type: string
+      statusCode:
+        example: 404
+        type: integer
+    type: object
+  errmsg._HyperUserWrongPassword:
+    properties:
+      message:
+        example: username or password is incorrect
+        type: string
+      statusCode:
+        example: 401
+        type: integer
+    type: object
+  errmsg._InternalServerError:
+    properties:
+      message:
+        example: 'internal server error: <details>'
+        type: string
+      statusCode:
+        example: 500
+        type: integer
+    type: object
+  errmsg._StageAlreadyExists:
+    properties:
+      message:
+        example: stage already exists
+        type: string
+      statusCode:
+        example: 409
+        type: integer
+    type: object
+  errmsg._StageInvalidRequest:
+    properties:
+      message:
+        example: invalid stage request payload
+        type: string
+      statusCode:
+        example: 400
+        type: integer
+    type: object
+  errmsg._StageMissingEnv:
+    properties:
+      message:
+        example: stage is missing an environment submission
+        type: string
+      statusCode:
+        example: 409
+        type: integer
+    type: object
+  errmsg._StageNotFound:
+    properties:
+      message:
+        example: stage not found
+        type: string
+      statusCode:
+        example: 404
+        type: integer
+    type: object
+  errmsg._StageReleaseNotFound:
+    properties:
+      message:
+        example: release not found
+        type: string
+      statusCode:
+        example: 404
+        type: integer
+    type: object
+  hyperusers.HyperUserLoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  hyperusers.HyperUserLoginResponse:
+    properties:
+      hyperuser:
+        $ref: '#/definitions/models.HyperUser'
+      token:
+        type: string
+    type: object
+  models.Deployment:
+    properties:
+      createdAt:
+        type: string
+      envTag:
+        type: string
+      id:
+        type: string
+      port:
+        type: integer
+      promotedAt:
+        type: string
+      stageId:
+        type: string
+      status:
+        description: staged|ready|stopped|deleted
+        type: string
+      version:
+        type: string
+    type: object
+  models.HyperUser:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  models.Stage:
+    properties:
+      createdAt:
+        type: string
+      envTag:
+        type: string
+      envText:
+        type: string
+      id:
+        type: string
+      lastTestResultId:
+        type: string
+      latestSessionId:
+        type: string
+      releaseId:
+        type: string
+      repoPath:
+        type: string
+      status:
+        $ref: '#/definitions/models.StageStatus'
+      updatedAt:
+        type: string
+    type: object
+  models.StageSession:
+    properties:
+      author:
+        type: string
+      createdAt:
+        type: string
+      envText:
+        type: string
+      id:
+        type: string
+      notes:
+        type: string
+      source:
+        description: template|manual|import
+        type: string
+      stageId:
+        type: string
+      testResultId:
+        type: string
+    type: object
+  models.StageStatus:
+    enum:
+    - pre
+    - active
+    - promoted
+    type: string
+    x-enum-varnames:
+    - StageStatusPre
+    - StageStatusActive
+    - StageStatusPromoted
+  models.StageTestResult:
+    properties:
+      error:
+        type: string
+      finishedAt:
+        type: string
+      id:
+        type: string
+      logPath:
+        type: string
+      sessionId:
+        type: string
+      stageId:
+        type: string
+      startedAt:
+        type: string
+      status:
+        $ref: '#/definitions/models.StageTestStatus'
+      wsToken:
+        type: string
+    type: object
+  models.StageTestStatus:
+    enum:
+    - running
+    - passed
+    - failed
+    - canceled
+    - error
+    type: string
+    x-enum-varnames:
+    - StageTestStatusRunning
+    - StageTestStatusPassed
+    - StageTestStatusFailed
+    - StageTestStatusCanceled
+    - StageTestStatusError
+info:
+  contact: {}
+  description: Hypervisor orchestration API for managing staged releases, deployments,
+    and hyperuser access tooling.
+  title: OpenHack Hypervisor API
+  version: 25.10.17.4
+paths:
+  /hypervisor/deployments:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Promotion payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/api.promoteStageRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Deployment'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errmsg._DeploymentInvalidRequest'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errmsg._StageNotFound'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/errmsg._StageMissingEnv'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errmsg._InternalServerError'
+      security:
+      - HyperUserAuth: []
+      summary: Promote stage to deployment
+      tags:
+      - Hypervisor Deployments
+  /hypervisor/hyperusers/login:
+    post:
+      consumes:
+      - application/json
+      description: Validates hyperuser credentials and issues a short-lived bearer
+        token.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/hyperusers.HyperUserLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hyperusers.HyperUserLoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errmsg._HyperUserInvalidPayload'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/errmsg._HyperUserWrongPassword'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errmsg._HyperUserNotExists'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errmsg._InternalServerError'
+      summary: Hyperuser login
+      tags:
+      - Hyperusers Auth
+  /hypervisor/hyperusers/ping:
+    get:
+      description: Confirms the hyperusers service slice is online.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: PONG
+          schema:
+            type: string
+      summary: Hyperusers health check
+      tags:
+      - Hyperusers Meta
+  /hypervisor/hyperusers/whoami:
+    get:
+      description: Returns the hyperuser extracted from the bearer token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.HyperUser'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/errmsg._HyperUserNoToken'
+      security:
+      - HyperUserAuth: []
+      summary: Current hyperuser profile
+      tags:
+      - Hyperusers Meta
+  /hypervisor/meta/ping:
+    get:
+      description: Lightweight heartbeat used by load balancers to confirm the Hypervisor
+        API is alive.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: PONG
+          schema:
+            type: string
+      summary: Health check
+      tags:
+      - Hypervisor Meta
+  /hypervisor/meta/version:
+    get:
+      description: Exposes the semantic version bundled with the running hypervisor
+        service.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: v25.10.17.4
+          schema:
+            type: string
+      summary: Current deployment version
+      tags:
+      - Hypervisor Meta
+  /hypervisor/stages:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listStagesResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errmsg._InternalServerError'
+      security:
+      - HyperUserAuth: []
+      summary: List stages
+      tags:
+      - Hypervisor Stages
+    post:
+      consumes:
+      - application/json
+      description: Bootstraps a stage by cloning the release repo and seeding the
+        template environment.
+      parameters:
+      - description: Stage details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/api.createStageRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Stage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errmsg._StageInvalidRequest'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errmsg._StageReleaseNotFound'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/errmsg._StageAlreadyExists'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errmsg._InternalServerError'
+      security:
+      - HyperUserAuth: []
+      summary: Prepare stage
+      tags:
+      - Hypervisor Stages
+  /hypervisor/stages/{stageId}:
+    get:
+      parameters:
+      - description: Stage identifier
+        in: path
+        name: stageId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Stage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errmsg._StageNotFound'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errmsg._InternalServerError'
+      security:
+      - HyperUserAuth: []
+      summary: Get stage
+      tags:
+      - Hypervisor Stages
+  /hypervisor/stages/{stageId}/sessions:
+    get:
+      parameters:
+      - description: Stage identifier
+        in: path
+        name: stageId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.StageSession'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errmsg._StageNotFound'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errmsg._InternalServerError'
+      security:
+      - HyperUserAuth: []
+      summary: List stage sessions
+      tags:
+      - Hypervisor Stages
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Stage identifier
+        in: path
+        name: stageId
+        required: true
+        type: string
+      - description: Session payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/api.createStageSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.stageSessionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errmsg._StageInvalidRequest'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errmsg._StageNotFound'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errmsg._InternalServerError'
+      security:
+      - HyperUserAuth: []
+      summary: Submit stage session
+      tags:
+      - Hypervisor Stages
+  /hypervisor/stages/{stageId}/tests:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Stage identifier
+        in: path
+        name: stageId
+        required: true
+        type: string
+      - description: Test payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/api.startStageTestRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.StageTestResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errmsg._StageInvalidRequest'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errmsg._StageNotFound'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errmsg._InternalServerError'
+      security:
+      - HyperUserAuth: []
+      summary: Start stage test
+      tags:
+      - Hypervisor Stages
+  /hypervisor/sync:
+    post:
+      description: Triggers a Git pull of the releases repository to refresh available
+        releases for staging.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.StatusResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errmsg._InternalServerError'
+      summary: Sync release metadata
+      tags:
+      - Hypervisor Sync
+securityDefinitions:
+  HyperUserAuth:
+    description: Provide the hyperuser bearer token as `Bearer <token>`.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

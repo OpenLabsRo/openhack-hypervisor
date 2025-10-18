@@ -1,3 +1,11 @@
+// @title OpenHack Hypervisor API
+// @version 25.10.17.4
+// @description Hypervisor orchestration API for managing staged releases, deployments, and hyperuser access tooling.
+// @BasePath /hypervisor
+// @securityDefinitions.apikey HyperUserAuth
+// @in header
+// @name Authorization
+// @description Provide the hyperuser bearer token as `Bearer <token>`.
 package main
 
 import (
@@ -9,6 +17,7 @@ import (
 
 	"hypervisor/internal"
 	"hypervisor/internal/env"
+	"hypervisor/internal/swagger"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -43,6 +52,7 @@ func main() {
 	}
 
 	app := internal.SetupApp(deploy, *envRoot, *appVersion)
+	swagger.Register(app)
 
 	fmt.Println("APP VERSION:", env.VERSION)
 
