@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Release represents an immutable build artifact of a tagged commit.
@@ -27,4 +28,19 @@ func GetReleaseByID(ctx context.Context, id string) (*Release, error) {
 		return nil, err
 	}
 	return &r, nil
+}
+
+func ListReleases(ctx context.Context) ([]Release, error) {
+	cursor, err := db.Releases.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var releases []Release
+	if err := cursor.All(ctx, &releases); err != nil {
+		return nil, err
+	}
+
+	return releases, nil
 }

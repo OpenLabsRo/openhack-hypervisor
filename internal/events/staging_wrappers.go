@@ -49,30 +49,8 @@ func (e *Emitter) StageFailed(releaseID, envTag string, err error) {
 	e.Emit(evt)
 }
 
-// StageSessionCreated records submission of a new stage session.
-func (e *Emitter) StageSessionCreated(stage models.Stage, session models.StageSession) {
-	if e == nil {
-		return
-	}
-
-	evt := models.Event{
-		Action:     "stage.session_created",
-		ActorID:    ActorSystem,
-		ActorRole:  ActorSystem,
-		TargetID:   session.ID,
-		TargetType: "stage_session",
-		Props: map[string]any{
-			"stageId":   stage.ID,
-			"releaseId": stage.ReleaseID,
-			"envTag":    stage.EnvTag,
-		},
-	}
-
-	e.Emit(evt)
-}
-
 // StageEnvUpdated records that the stage environment has been updated on disk.
-func (e *Emitter) StageEnvUpdated(stage models.Stage, session models.StageSession) {
+func (e *Emitter) StageEnvUpdated(stage models.Stage) {
 	if e == nil {
 		return
 	}
@@ -83,94 +61,104 @@ func (e *Emitter) StageEnvUpdated(stage models.Stage, session models.StageSessio
 		ActorRole:  ActorSystem,
 		TargetID:   stage.ID,
 		TargetType: "stage",
+	}
+
+	e.Emit(evt)
+}
+
+// StageDeleted records the deletion of a stage and its resources.
+func (e *Emitter) StageDeleted(stageID string) {
+	if e == nil {
+		return
+	}
+
+	evt := models.Event{
+		Action:     "stage.deleted",
+		ActorID:    ActorSystem,
+		ActorRole:  ActorSystem,
+		TargetID:   stageID,
+		TargetType: "stage",
+	}
+
+	e.Emit(evt)
+}
+
+// TestStarted records the beginning of a manual test run.
+func (e *Emitter) TestStarted(stage models.Stage, test models.Test) {
+	if e == nil {
+		return
+	}
+
+	evt := models.Event{
+		Action:     "test.started",
+		ActorID:    ActorSystem,
+		ActorRole:  ActorSystem,
+		TargetID:   test.ID,
+		TargetType: "test",
 		Props: map[string]any{
-			"sessionId": session.ID,
+			"stageId": stage.ID,
 		},
 	}
 
 	e.Emit(evt)
 }
 
-// StageTestStarted records the beginning of a manual stage test run.
-func (e *Emitter) StageTestStarted(stage models.Stage, session models.StageSession, result models.StageTestResult) {
+// TestPassed records a successful test completion.
+func (e *Emitter) TestPassed(stageID, testID string, duration time.Duration) {
 	if e == nil {
 		return
 	}
 
 	evt := models.Event{
-		Action:     "stage.test_started",
+		Action:     "test.passed",
 		ActorID:    ActorSystem,
 		ActorRole:  ActorSystem,
-		TargetID:   result.ID,
-		TargetType: "stage_test_result",
+		TargetID:   testID,
+		TargetType: "test",
 		Props: map[string]any{
-			"stageId":   stage.ID,
-			"sessionId": session.ID,
+			"stageId":  stageID,
+			"duration": duration.Seconds(),
 		},
 	}
 
 	e.Emit(evt)
 }
 
-// StageTestPassed records a successful stage test completion.
-func (e *Emitter) StageTestPassed(stageID, sessionID, resultID string, duration time.Duration) {
+// TestFailed records a failing test completion.
+func (e *Emitter) TestFailed(stageID, testID string, errMsg string) {
 	if e == nil {
 		return
 	}
 
 	evt := models.Event{
-		Action:     "stage.test_passed",
+		Action:     "test.failed",
 		ActorID:    ActorSystem,
 		ActorRole:  ActorSystem,
-		TargetID:   resultID,
-		TargetType: "stage_test_result",
+		TargetID:   testID,
+		TargetType: "test",
 		Props: map[string]any{
-			"stageId":   stageID,
-			"sessionId": sessionID,
-			"duration":  duration.Seconds(),
+			"stageId": stageID,
+			"error":   errMsg,
 		},
 	}
 
 	e.Emit(evt)
 }
 
-// StageTestFailed records a failing stage test completion.
-func (e *Emitter) StageTestFailed(stageID, sessionID, resultID string, errMsg string) {
+// TestCanceled records a canceled test.
+func (e *Emitter) TestCanceled(stageID, testID string) {
 	if e == nil {
 		return
 	}
 
 	evt := models.Event{
-		Action:     "stage.test_failed",
+		Action:     "test.canceled",
 		ActorID:    ActorSystem,
 		ActorRole:  ActorSystem,
-		TargetID:   resultID,
-		TargetType: "stage_test_result",
+		TargetID:   testID,
+		TargetType: "test",
 		Props: map[string]any{
-			"stageId":   stageID,
-			"sessionId": sessionID,
-			"error":     errMsg,
-		},
-	}
-
-	e.Emit(evt)
-}
-
-// StageTestCanceled records a canceled stage test.
-func (e *Emitter) StageTestCanceled(stageID, sessionID, resultID string) {
-	if e == nil {
-		return
-	}
-
-	evt := models.Event{
-		Action:     "stage.test_canceled",
-		ActorID:    ActorSystem,
-		ActorRole:  ActorSystem,
-		TargetID:   resultID,
-		TargetType: "stage_test_result",
-		Props: map[string]any{
-			"stageId":   stageID,
-			"sessionId": sessionID,
+			"stageId": stageID,
 		},
 	}
 

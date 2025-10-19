@@ -1,0 +1,2 @@
+wscat --connect ws://localhost:8080/.ws/stages/v25.10.19.1-dev/tests/$1 \
+      --header "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjA5NTM4MDgsInBhc3N3b3JkIjoiJDJhJDEyJC9EbHVwOVVpVUwwano5cnpHNWl3Y08vVnVnLzF0Q2pXWFdxZGN0dmVpem1CcFNONXlUVUY2IiwidXNlcm5hbWUiOiJzdW5zaGluZSJ9.kdktqVBk-YTUg-yb5rByUxN4-OxCMnwql26PlnKfQCo"

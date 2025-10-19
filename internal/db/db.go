@@ -17,14 +17,13 @@ var (
 	RDB    *redis.Client
 	Client *mongo.Client
 
-	HyperUsers       *mongo.Collection
-	GitCommits       *mongo.Collection
-	Releases         *mongo.Collection
-	Stages           *mongo.Collection
-	StageSessions    *mongo.Collection
-	StageTestResults *mongo.Collection
-	Deployments      *mongo.Collection
-	Events           *mongo.Collection
+	HyperUsers  *mongo.Collection
+	GitCommits  *mongo.Collection
+	Releases    *mongo.Collection
+	Stages      *mongo.Collection
+	Tests       *mongo.Collection
+	Deployments *mongo.Collection
+	Events      *mongo.Collection
 )
 
 const databaseName = "hypervisor"
@@ -52,8 +51,7 @@ func InitDB(deployment string) error {
 	gitCommitCollection := "git_commits"
 	releasesCollection := "releases"
 	stagesCollection := "stages"
-	stageSessionsCollection := "stage_sessions"
-	stageTestResultsCollection := "stage_test_results"
+	testsCollection := "tests"
 	deploymentsCollection := "deployments"
 	eventsCollection := "events"
 
@@ -62,8 +60,7 @@ func InitDB(deployment string) error {
 		gitCommitCollection = "test_git_commits"
 		releasesCollection = "test_releases"
 		stagesCollection = "test_stages"
-		stageSessionsCollection = "test_stage_sessions"
-		stageTestResultsCollection = "test_stage_test_results"
+		testsCollection = "test_tests"
 		deploymentsCollection = "test_deployments"
 		eventsCollection = "test_events"
 	}
@@ -71,8 +68,7 @@ func InitDB(deployment string) error {
 	GitCommits = db.Collection(gitCommitCollection)
 	Releases = db.Collection(releasesCollection)
 	Stages = db.Collection(stagesCollection)
-	StageSessions = db.Collection(stageSessionsCollection)
-	StageTestResults = db.Collection(stageTestResultsCollection)
+	Tests = db.Collection(testsCollection)
 	Deployments = db.Collection(deploymentsCollection)
 	Events = db.Collection(eventsCollection)
 

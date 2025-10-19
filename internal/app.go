@@ -50,13 +50,27 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	hypervisor.Post("/stages", models.HyperUserMiddleware, api.CreateStageHandler)
 	hypervisor.Get("/stages", models.HyperUserMiddleware, api.ListStagesHandler)
 	hypervisor.Get("/stages/:stageId", models.HyperUserMiddleware, api.GetStageHandler)
-	hypervisor.Post("/stages/:stageId/sessions", models.HyperUserMiddleware, api.CreateStageSessionHandler)
-	hypervisor.Get("/stages/:stageId/sessions", models.HyperUserMiddleware, api.ListStageSessionsHandler)
-	hypervisor.Post("/stages/:stageId/tests", models.HyperUserMiddleware, api.StartStageTestHandler)
+	hypervisor.Get("/stages/:stageId/env", models.HyperUserMiddleware, api.GetStageEnvHandler)
+	hypervisor.Put("/stages/:stageId/env", models.HyperUserMiddleware, api.UpdateStageEnvHandler)
+	hypervisor.Delete("/stages/:stageId", models.HyperUserMiddleware, api.DeleteStageHandler)
+	hypervisor.Get("/stages/:stageId/tests", models.HyperUserMiddleware, api.ListTestsHandler)
+	hypervisor.Post("/stages/:stageId/tests", models.HyperUserMiddleware, api.StartTestHandler)
 
 	hypervisor.Post("/deployments", models.HyperUserMiddleware, api.CreateDeploymentHandler)
+	hypervisor.Get("/releases", models.HyperUserMiddleware, api.ListReleasesHandler)
+	hypervisor.Post("/releases/sync", models.HyperUserMiddleware, api.SyncHandler)
+	hypervisor.Get("/env/template", models.HyperUserMiddleware, api.GetEnvTemplateHandler)
+	hypervisor.Put("/env/template", models.HyperUserMiddleware, api.UpdateEnvTemplateHandler)
 
-	hypervisor.Post("/sync", models.HyperUserMiddleware, api.SyncHandler)
+	ws := app.Group("/.ws")
+	ws.Use(func(c fiber.Ctx) error {
+		if !c.Request().Header.IsGet() || !c.Request().Header.ConnectionUpgrade() {
+			return fiber.ErrUpgradeRequired
+		}
+		return c.Next()
+	})
+	ws.Use(models.HyperUserMiddleware)
+	ws.Get("/stages/:stageId/tests/:testId", api.StreamTestLogs)
 
 	return app
 }

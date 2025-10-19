@@ -23,6 +23,8 @@ var openhackDirs = []string{
 	paths.OpenHackReposDir,
 	paths.OpenHackBuildsDir,
 	paths.OpenHackEnvDir,
+	paths.OpenHackRuntimeDir,
+	paths.OpenHackRuntimeLogsDir,
 }
 
 // EnsureLayout creates the required directory structure for the hypervisor and backend builds.

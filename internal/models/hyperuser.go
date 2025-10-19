@@ -22,7 +22,7 @@ type HyperUser struct {
 
 func (hu *HyperUser) GenToken() string {
 	claims, _ := sj.ToClaims(hu)
-	claims.SetExpiresAt(time.Now().Add(time.Hour))
+	claims.SetExpiresAt(time.Now().Add(24 * time.Hour))
 
 	token := claims.Generate(env.JWT_SECRET)
 	return token

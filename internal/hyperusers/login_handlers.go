@@ -25,7 +25,7 @@ type HyperUserLoginResponse struct {
 
 // loginHandler authenticates hyperusers and returns a scoped JWT token.
 // @Summary Hyperuser login
-// @Description Validates hyperuser credentials and issues a short-lived bearer token.
+// @Description Validates hyperuser credentials and issues a 24-hour bearer token.
 // @Tags Hyperusers Auth
 // @Accept json
 // @Produce json

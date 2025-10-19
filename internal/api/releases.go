@@ -6,6 +6,7 @@ import (
 
 	"hypervisor/internal/core"
 	"hypervisor/internal/errmsg"
+	"hypervisor/internal/models"
 	"hypervisor/internal/utils"
 
 	"github.com/gofiber/fiber/v3"
@@ -16,14 +17,19 @@ type StatusResponse struct {
 	Status string `json:"status"`
 }
 
+type listReleasesResponse struct {
+	Releases []models.Release `json:"releases"`
+}
+
 // SyncHandler refreshes release data from the backing Git repository.
 // @Summary Sync release metadata
 // @Description Triggers a Git pull of the releases repository to refresh available releases for staging.
-// @Tags Hypervisor Sync
+// @Tags Hypervisor Releases
+// @Security HyperUserAuth
 // @Produce json
 // @Success 200 {object} StatusResponse
 // @Failure 500 {object} errmsg._InternalServerError
-// @Router /hypervisor/sync [post]
+// @Router /hypervisor/releases/sync [post]
 func SyncHandler(c fiber.Ctx) error {
 	// Assume repoURL from env or config
 	repoURL := os.Getenv("REPO_URL")
@@ -37,4 +43,21 @@ func SyncHandler(c fiber.Ctx) error {
 	}
 
 	return c.JSON(StatusResponse{Status: "sync completed"})
+}
+
+// ListReleasesHandler returns all synced releases ordered by recency.
+// @Summary List synced releases
+// @Tags Hypervisor Releases
+// @Security HyperUserAuth
+// @Produce json
+// @Success 200 {object} listReleasesResponse
+// @Failure 500 {object} errmsg._InternalServerError
+// @Router /hypervisor/releases [get]
+func ListReleasesHandler(c fiber.Ctx) error {
+	releases, err := models.ListReleases(context.Background())
+	if err != nil {
+		return utils.StatusError(c, errmsg.InternalServerError(err))
+	}
+
+	return c.JSON(listReleasesResponse{Releases: releases})
 }

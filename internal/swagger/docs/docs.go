@@ -77,9 +77,87 @@ const docTemplate = `{
                 }
             }
         },
+        "/hypervisor/env/template": {
+            "get": {
+                "security": [
+                    {
+                        "HyperUserAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Hypervisor Env"
+                ],
+                "summary": "Get template env",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.envTemplateResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errmsg._InternalServerError"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "HyperUserAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Hypervisor Env"
+                ],
+                "summary": "Update template env",
+                "parameters": [
+                    {
+                        "description": "Template env contents",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateEnvTemplateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errmsg._EnvTemplateInvalidRequest"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errmsg._InternalServerError"
+                        }
+                    }
+                }
+            }
+        },
         "/hypervisor/hyperusers/login": {
             "post": {
-                "description": "Validates hyperuser credentials and issues a short-lived bearer token.",
+                "description": "Validates hyperuser credentials and issues a 24-hour bearer token.",
                 "consumes": [
                     "application/json"
                 ],
@@ -226,6 +304,67 @@ const docTemplate = `{
                 }
             }
         },
+        "/hypervisor/releases": {
+            "get": {
+                "security": [
+                    {
+                        "HyperUserAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Hypervisor Releases"
+                ],
+                "summary": "List synced releases",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.listReleasesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errmsg._InternalServerError"
+                        }
+                    }
+                }
+            }
+        },
+        "/hypervisor/releases/sync": {
+            "post": {
+                "security": [
+                    {
+                        "HyperUserAuth": []
+                    }
+                ],
+                "description": "Triggers a Git pull of the releases repository to refresh available releases for staging.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Hypervisor Releases"
+                ],
+                "summary": "Sync release metadata",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.StatusResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errmsg._InternalServerError"
+                        }
+                    }
+                }
+            }
+        },
         "/hypervisor/stages": {
             "get": {
                 "security": [
@@ -287,7 +426,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.Stage"
+                            "$ref": "#/definitions/api.StageResponse"
                         }
                     },
                     "400": {
@@ -344,7 +483,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Stage"
+                            "$ref": "#/definitions/api.StageResponse"
                         }
                     },
                     "404": {
@@ -362,7 +501,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/hypervisor/stages/{stageId}/sessions": {
+        "/hypervisor/stages/{stageId}/env": {
             "get": {
                 "security": [
                     {
@@ -375,7 +514,7 @@ const docTemplate = `{
                 "tags": [
                     "Hypervisor Stages"
                 ],
-                "summary": "List stage sessions",
+                "summary": "Get stage env",
                 "parameters": [
                     {
                         "type": "string",
@@ -389,10 +528,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.StageSession"
-                            }
+                            "$ref": "#/definitions/api.StageEnvResponse"
                         }
                     },
                     "404": {
@@ -409,7 +545,7 @@ const docTemplate = `{
                     }
                 }
             },
-            "post": {
+            "put": {
                 "security": [
                     {
                         "HyperUserAuth": []
@@ -424,7 +560,7 @@ const docTemplate = `{
                 "tags": [
                     "Hypervisor Stages"
                 ],
-                "summary": "Submit stage session",
+                "summary": "Update stage env",
                 "parameters": [
                     {
                         "type": "string",
@@ -434,20 +570,20 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Session payload",
+                        "description": "Env payload",
                         "name": "payload",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api.createStageSessionRequest"
+                            "$ref": "#/definitions/api.UpdateStageEnvRequest"
                         }
                     }
                 ],
                 "responses": {
-                    "201": {
-                        "description": "Created",
+                    "200": {
+                        "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api.stageSessionResponse"
+                            "$ref": "#/definitions/api.StageResponse"
                         }
                     },
                     "400": {
@@ -478,9 +614,6 @@ const docTemplate = `{
                         "HyperUserAuth": []
                     }
                 ],
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -495,15 +628,6 @@ const docTemplate = `{
                         "name": "stageId",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "Test payload",
-                        "name": "payload",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.startStageTestRequest"
-                        }
                     }
                 ],
                 "responses": {
@@ -533,39 +657,40 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/hypervisor/sync": {
-            "post": {
-                "description": "Triggers a Git pull of the releases repository to refresh available releases for staging.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Hypervisor Sync"
-                ],
-                "summary": "Sync release metadata",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.StatusResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/errmsg._InternalServerError"
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
+        "api.StageEnvResponse": {
+            "type": "object",
+            "properties": {
+                "envText": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.StageResponse": {
+            "type": "object",
+            "properties": {
+                "envText": {
+                    "type": "string"
+                },
+                "stage": {
+                    "$ref": "#/definitions/models.Stage"
+                }
+            }
+        },
         "api.StatusResponse": {
             "type": "object",
             "properties": {
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.UpdateStageEnvRequest": {
+            "type": "object",
+            "properties": {
+                "envText": {
                     "type": "string"
                 }
             }
@@ -581,20 +706,22 @@ const docTemplate = `{
                 }
             }
         },
-        "api.createStageSessionRequest": {
+        "api.envTemplateResponse": {
             "type": "object",
             "properties": {
-                "author": {
-                    "type": "string"
-                },
                 "envText": {
                     "type": "string"
-                },
-                "notes": {
-                    "type": "string"
-                },
-                "source": {
-                    "type": "string"
+                }
+            }
+        },
+        "api.listReleasesResponse": {
+            "type": "object",
+            "properties": {
+                "releases": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Release"
+                    }
                 }
             }
         },
@@ -617,21 +744,10 @@ const docTemplate = `{
                 }
             }
         },
-        "api.stageSessionResponse": {
+        "api.updateEnvTemplateRequest": {
             "type": "object",
             "properties": {
-                "session": {
-                    "$ref": "#/definitions/models.StageSession"
-                },
-                "stage": {
-                    "$ref": "#/definitions/models.Stage"
-                }
-            }
-        },
-        "api.startStageTestRequest": {
-            "type": "object",
-            "properties": {
-                "sessionId": {
+                "envText": {
                     "type": "string"
                 }
             }
@@ -642,6 +758,19 @@ const docTemplate = `{
                 "message": {
                     "type": "string",
                     "example": "invalid deployment request payload"
+                },
+                "statusCode": {
+                    "type": "integer",
+                    "example": 400
+                }
+            }
+        },
+        "errmsg._EnvTemplateInvalidRequest": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "invalid template env payload"
                 },
                 "statusCode": {
                     "type": "integer",
@@ -745,7 +874,7 @@ const docTemplate = `{
             "properties": {
                 "message": {
                     "type": "string",
-                    "example": "stage is missing an environment submission"
+                    "example": "stage is missing an environment update"
                 },
                 "statusCode": {
                     "type": "integer",
@@ -842,6 +971,20 @@ const docTemplate = `{
                 }
             }
         },
+        "models.Release": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "sha": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Stage": {
             "type": "object",
             "properties": {
@@ -851,58 +994,19 @@ const docTemplate = `{
                 "envTag": {
                     "type": "string"
                 },
-                "envText": {
-                    "type": "string"
-                },
                 "id": {
                     "type": "string"
                 },
                 "lastTestResultId": {
                     "type": "string"
                 },
-                "latestSessionId": {
-                    "type": "string"
-                },
                 "releaseId": {
-                    "type": "string"
-                },
-                "repoPath": {
                     "type": "string"
                 },
                 "status": {
                     "$ref": "#/definitions/models.StageStatus"
                 },
                 "updatedAt": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.StageSession": {
-            "type": "object",
-            "properties": {
-                "author": {
-                    "type": "string"
-                },
-                "createdAt": {
-                    "type": "string"
-                },
-                "envText": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "notes": {
-                    "type": "string"
-                },
-                "source": {
-                    "description": "template|manual|import",
-                    "type": "string"
-                },
-                "stageId": {
-                    "type": "string"
-                },
-                "testResultId": {
                     "type": "string"
                 }
             }
@@ -933,9 +1037,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "logPath": {
-                    "type": "string"
-                },
-                "sessionId": {
                     "type": "string"
                 },
                 "stageId": {

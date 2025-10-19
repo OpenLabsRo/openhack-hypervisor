@@ -7,7 +7,7 @@ import (
 
 // Check performs a health check on the hypervisor service.
 func Check() error {
-	url := "http://localhost:8080/hypervisor/ping"
+	url := "http://localhost:8080/hypervisor/meta/ping"
 	resp, err := http.Get(url)
 	if err != nil {
 		return err

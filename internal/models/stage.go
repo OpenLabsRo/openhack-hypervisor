@@ -19,16 +19,14 @@ const (
 
 // Stage represents the configuration workspace for a release/environment pair.
 type Stage struct {
-	ID               string      `bson:"id" json:"id"`
-	ReleaseID        string      `bson:"releaseId" json:"releaseId"`
-	EnvTag           string      `bson:"envTag" json:"envTag"`
-	Status           StageStatus `bson:"status" json:"status"`
-	EnvText          string      `bson:"envText" json:"envText"`
-	RepoPath         string      `bson:"repoPath" json:"repoPath"`
-	LatestSessionID  string      `bson:"latestSessionId,omitempty" json:"latestSessionId,omitempty"`
-	LastTestResultID string      `bson:"lastTestResultId,omitempty" json:"lastTestResultId,omitempty"`
-	CreatedAt        time.Time   `bson:"createdAt" json:"createdAt"`
-	UpdatedAt        time.Time   `bson:"updatedAt" json:"updatedAt"`
+	ID           string      `bson:"id" json:"id"`
+	ReleaseID    string      `bson:"releaseId" json:"releaseId"`
+	EnvTag       string      `bson:"envTag" json:"envTag"`
+	Status       StageStatus `bson:"status" json:"status"`
+	TestSequence int         `bson:"testSequence,omitempty" json:"testSequence,omitempty"`
+	LastTestID   string      `bson:"lastTestId,omitempty" json:"lastTestId,omitempty"`
+	CreatedAt    time.Time   `bson:"createdAt" json:"createdAt"`
+	UpdatedAt    time.Time   `bson:"updatedAt" json:"updatedAt"`
 }
 
 func CreateStage(ctx context.Context, stage Stage) error {
@@ -43,6 +41,7 @@ func CreateStage(ctx context.Context, stage Stage) error {
 	} else {
 		stage.UpdatedAt = stage.UpdatedAt.UTC()
 	}
+	stage.TestSequence = 0
 	_, err := db.Stages.InsertOne(ctx, stage)
 	return err
 }
@@ -59,15 +58,33 @@ func GetStageByID(ctx context.Context, id string) (*Stage, error) {
 func UpdateStage(ctx context.Context, stage Stage) error {
 	_, err := db.Stages.UpdateOne(ctx, bson.M{"id": stage.ID}, bson.M{
 		"$set": bson.M{
-			"status":           stage.Status,
-			"envText":          stage.EnvText,
-			"repoPath":         stage.RepoPath,
-			"latestSessionId":  stage.LatestSessionID,
-			"lastTestResultId": stage.LastTestResultID,
-			"updatedAt":        stage.UpdatedAt.UTC(),
+			"status":       stage.Status,
+			"testSequence": stage.TestSequence,
+			"lastTestId":   stage.LastTestID,
+			"updatedAt":    stage.UpdatedAt.UTC(),
 		},
 	})
 	return err
+}
+
+func DeleteStage(ctx context.Context, stageID string) error {
+	_, err := db.Stages.DeleteOne(ctx, bson.M{"id": stageID})
+	return err
+}
+
+// NextTestSequence increments the stage test sequence counter and returns the new value.
+func NextTestSequence(ctx context.Context, stageID string) (int, error) {
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	update := bson.M{
+		"$inc": bson.M{"testSequence": 1},
+	}
+
+	var stage Stage
+	if err := db.Stages.FindOneAndUpdate(ctx, bson.M{"id": stageID}, update, opts).Decode(&stage); err != nil {
+		return 0, err
+	}
+
+	return stage.TestSequence, nil
 }
 
 func ListStages(ctx context.Context) ([]Stage, error) {

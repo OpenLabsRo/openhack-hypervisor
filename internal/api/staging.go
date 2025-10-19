@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 
 	"hypervisor/internal/core"
@@ -21,6 +22,19 @@ type createStageRequest struct {
 	EnvTag    string `json:"envTag"`
 }
 
+type StageResponse struct {
+	Stage   models.Stage `json:"stage"`
+	EnvText string       `json:"envText"`
+}
+
+type StageEnvResponse struct {
+	EnvText string `json:"envText"`
+}
+
+type UpdateStageEnvRequest struct {
+	EnvText *string `json:"envText"`
+}
+
 // CreateStageHandler prepares a new stage and returns the seeded template.
 // @Summary Prepare stage
 // @Description Bootstraps a stage by cloning the release repo and seeding the template environment.
@@ -29,7 +43,7 @@ type createStageRequest struct {
 // @Accept json
 // @Produce json
 // @Param payload body createStageRequest true "Stage details"
-// @Success 201 {object} models.Stage
+// @Success 201 {object} StageResponse
 // @Failure 400 {object} errmsg._StageInvalidRequest
 // @Failure 404 {object} errmsg._StageReleaseNotFound
 // @Failure 409 {object} errmsg._StageAlreadyExists
@@ -52,7 +66,12 @@ func CreateStageHandler(c fiber.Ctx) error {
 		return utils.StatusError(c, err)
 	}
 
-	return c.Status(http.StatusCreated).JSON(stage)
+	envText, err := core.ReadStageEnv(stage.ID)
+	if err != nil {
+		return utils.StatusError(c, errmsg.InternalServerError(err))
+	}
+
+	return c.Status(http.StatusCreated).JSON(StageResponse{Stage: *stage, EnvText: envText})
 }
 
 type listStagesResponse struct {
@@ -82,7 +101,7 @@ func ListStagesHandler(c fiber.Ctx) error {
 // @Security HyperUserAuth
 // @Produce json
 // @Param stageId path string true "Stage identifier"
-// @Success 200 {object} models.Stage
+// @Success 200 {object} StageResponse
 // @Failure 404 {object} errmsg._StageNotFound
 // @Failure 500 {object} errmsg._InternalServerError
 // @Router /hypervisor/stages/{stageId} [get]
@@ -100,123 +119,153 @@ func GetStageHandler(c fiber.Ctx) error {
 		return utils.StatusError(c, err)
 	}
 
-	return c.JSON(stage)
-}
-
-type createStageSessionRequest struct {
-	EnvText string `json:"envText"`
-	Author  string `json:"author"`
-	Notes   string `json:"notes"`
-	Source  string `json:"source"`
-}
-
-type stageSessionResponse struct {
-	Stage   models.Stage        `json:"stage"`
-	Session models.StageSession `json:"session"`
-}
-
-// CreateStageSessionHandler records a new environment snapshot for a stage.
-// @Summary Submit stage session
-// @Tags Hypervisor Stages
-// @Security HyperUserAuth
-// @Accept json
-// @Produce json
-// @Param stageId path string true "Stage identifier"
-// @Param payload body createStageSessionRequest true "Session payload"
-// @Success 201 {object} stageSessionResponse
-// @Failure 400 {object} errmsg._StageInvalidRequest
-// @Failure 404 {object} errmsg._StageNotFound
-// @Failure 500 {object} errmsg._InternalServerError
-// @Router /hypervisor/stages/{stageId}/sessions [post]
-func CreateStageSessionHandler(c fiber.Ctx) error {
-	stageID := strings.TrimSpace(c.Params("stageId"))
-	if stageID == "" {
-		return utils.StatusError(c, errmsg.StageInvalidRequest)
-	}
-
-	var req createStageSessionRequest
-	if err := json.Unmarshal(c.Body(), &req); err != nil {
-		return utils.StatusError(c, errmsg.StageInvalidRequest)
-	}
-
-	session, stage, err := core.SubmitStageSession(context.Background(), stageID, req.EnvText, req.Author, req.Notes, req.Source)
+	envText, err := core.ReadStageEnv(stage.ID)
 	if err != nil {
-		return utils.StatusError(c, err)
+		return utils.StatusError(c, errmsg.InternalServerError(err))
 	}
 
-	return c.Status(http.StatusCreated).JSON(stageSessionResponse{Stage: *stage, Session: *session})
+	return c.JSON(StageResponse{Stage: *stage, EnvText: envText})
 }
 
-// ListStageSessionsHandler returns all sessions for a stage.
-// @Summary List stage sessions
+// GetStageEnvHandler returns the current .env contents for a stage.
+// @Summary Get stage env
 // @Tags Hypervisor Stages
 // @Security HyperUserAuth
 // @Produce json
 // @Param stageId path string true "Stage identifier"
-// @Success 200 {array} models.StageSession
+// @Success 200 {object} StageEnvResponse
 // @Failure 404 {object} errmsg._StageNotFound
 // @Failure 500 {object} errmsg._InternalServerError
-// @Router /hypervisor/stages/{stageId}/sessions [get]
-func ListStageSessionsHandler(c fiber.Ctx) error {
+// @Router /hypervisor/stages/{stageId}/env [get]
+func GetStageEnvHandler(c fiber.Ctx) error {
 	stageID := strings.TrimSpace(c.Params("stageId"))
 	if stageID == "" {
 		return utils.StatusError(c, errmsg.StageNotFound)
 	}
 
-	if _, err := models.GetStageByID(context.Background(), stageID); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
+	envText, err := core.ReadStageEnv(stageID)
+	if err != nil {
+		// If the file doesn't exist, it's effectively a 404.
+		if os.IsNotExist(err) {
 			return utils.StatusError(c, errmsg.StageNotFound)
 		}
-		return utils.StatusError(c, err)
-	}
-
-	sessions, err := models.ListStageSessions(context.Background(), stageID)
-	if err != nil {
 		return utils.StatusError(c, errmsg.InternalServerError(err))
 	}
 
-	return c.JSON(sessions)
+	return c.JSON(StageEnvResponse{EnvText: envText})
 }
 
-type startStageTestRequest struct {
-	SessionID string `json:"sessionId"`
-}
-
-// StartStageTestHandler launches a manual stage test run.
-// @Summary Start stage test
+// UpdateStageEnvHandler writes new environment contents for a stage.
+// @Summary Update stage env
 // @Tags Hypervisor Stages
 // @Security HyperUserAuth
 // @Accept json
 // @Produce json
 // @Param stageId path string true "Stage identifier"
-// @Param payload body startStageTestRequest true "Test payload"
-// @Success 201 {object} models.StageTestResult
+// @Param payload body UpdateStageEnvRequest true "Env payload"
+// @Success 200 {object} StageResponse
 // @Failure 400 {object} errmsg._StageInvalidRequest
 // @Failure 404 {object} errmsg._StageNotFound
 // @Failure 500 {object} errmsg._InternalServerError
-// @Router /hypervisor/stages/{stageId}/tests [post]
-func StartStageTestHandler(c fiber.Ctx) error {
+// @Router /hypervisor/stages/{stageId}/env [put]
+func UpdateStageEnvHandler(c fiber.Ctx) error {
 	stageID := strings.TrimSpace(c.Params("stageId"))
 	if stageID == "" {
 		return utils.StatusError(c, errmsg.StageInvalidRequest)
 	}
 
-	var req startStageTestRequest
+	var req UpdateStageEnvRequest
 	if err := json.Unmarshal(c.Body(), &req); err != nil {
 		return utils.StatusError(c, errmsg.StageInvalidRequest)
 	}
 
-	req.SessionID = strings.TrimSpace(req.SessionID)
-	if req.SessionID == "" {
+	if req.EnvText == nil {
 		return utils.StatusError(c, errmsg.StageInvalidRequest)
 	}
 
-	result, err := core.StartStageTest(context.Background(), stageID, req.SessionID)
+	stage, err := core.UpdateStageEnv(context.Background(), stageID, *req.EnvText)
 	if err != nil {
 		return utils.StatusError(c, err)
 	}
 
-	return c.Status(http.StatusCreated).JSON(result)
+	return c.JSON(StageResponse{Stage: *stage, EnvText: *req.EnvText})
+}
+
+// DeleteStageHandler removes a stage and all associated resources.
+// @Summary Delete stage
+// @Tags Hypervisor Stages
+// @Security HyperUserAuth
+// @Produce json
+// @Param stageId path string true "Stage identifier"
+// @Success 204
+// @Failure 400 {object} errmsg._StageInvalidRequest
+// @Failure 404 {object} errmsg._StageNotFound
+// @Failure 500 {object} errmsg._InternalServerError
+// @Router /hypervisor/stages/{stageId} [delete]
+func DeleteStageHandler(c fiber.Ctx) error {
+	stageID := strings.TrimSpace(c.Params("stageId"))
+	if stageID == "" {
+		return utils.StatusError(c, errmsg.StageInvalidRequest)
+	}
+
+	if err := core.DeleteStage(context.Background(), stageID); err != nil {
+		return utils.StatusError(c, err)
+	}
+
+	return c.SendStatus(http.StatusNoContent)
+}
+
+type listTestsResponse struct {
+	Tests []models.Test `json:"tests"`
+}
+
+// ListTestsHandler returns all tests associated with a stage.
+// @Summary List stage tests
+// @Tags Hypervisor Stages
+// @Security HyperUserAuth
+// @Produce json
+// @Param stageId path string true "Stage identifier"
+// @Success 200 {object} listTestsResponse
+// @Failure 404 {object} errmsg._StageNotFound
+// @Failure 500 {object} errmsg._InternalServerError
+// @Router /hypervisor/stages/{stageId}/tests [get]
+func ListTestsHandler(c fiber.Ctx) error {
+	stageID := strings.TrimSpace(c.Params("stageId"))
+	if stageID == "" {
+		return utils.StatusError(c, errmsg.StageNotFound)
+	}
+
+	tests, err := core.ListTests(context.Background(), stageID)
+	if err != nil {
+		return utils.StatusError(c, err)
+	}
+
+	return c.JSON(listTestsResponse{Tests: tests})
+}
+
+// StartTestHandler launches a manual stage test run.
+// @Summary Start stage test
+// @Tags Hypervisor Stages
+// @Security HyperUserAuth
+// @Produce json
+// @Param stageId path string true "Stage identifier"
+// @Success 201 {object} models.Test
+// @Failure 400 {object} errmsg._StageInvalidRequest
+// @Failure 404 {object} errmsg._StageNotFound
+// @Failure 500 {object} errmsg._InternalServerError
+// @Router /hypervisor/stages/{stageId}/tests [post]
+func StartTestHandler(c fiber.Ctx) error {
+	stageID := strings.TrimSpace(c.Params("stageId"))
+	if stageID == "" {
+		return utils.StatusError(c, errmsg.StageInvalidRequest)
+	}
+
+	test, err := core.StartTest(context.Background(), stageID)
+	if err != nil {
+		return utils.StatusError(c, err)
+	}
+
+	return c.Status(http.StatusCreated).JSON(test)
 }
 
 type promoteStageRequest struct {
