@@ -4,15 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"hypervisor/internal/errmsg"
 	"hypervisor/internal/events"
-	"hypervisor/internal/fsutil"
-	"hypervisor/internal/gitops"
+	"hypervisor/internal/fs"
+	"hypervisor/internal/git"
 	"hypervisor/internal/models"
 	"hypervisor/internal/paths"
 
@@ -50,11 +52,17 @@ func PrepareStage(ctx context.Context, releaseID, envTag string) (*models.Stage,
 	}
 
 	repoPath := paths.OpenHackRepoPath(id)
-	if err := gitops.CloneAndCheckout(repoURL, repoPath, release.Sha); err != nil {
+	if err := git.CloneAndCheckout(repoURL, repoPath, release.Sha); err != nil {
 		if events.Em != nil {
 			events.Em.StageFailed(releaseID, envTag, err)
 		}
 		return nil, "", err
+	}
+
+	cmd := exec.Command("./API_SPEC")
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		log.Printf("failed to run API_SPEC script for stage %s: %v", id, err)
 	}
 
 	template, err := ReadEnvTemplate()
@@ -97,12 +105,12 @@ func PrepareStage(ctx context.Context, releaseID, envTag string) (*models.Stage,
 
 func writeStageEnvFile(stageID string, envText string) error {
 	envDir := paths.OpenHackEnvPath(stageID)
-	if err := fsutil.EnsureDir(envDir, 0o755); err != nil {
+	if err := fs.EnsureDir(envDir, 0o755); err != nil {
 		return err
 	}
 
 	envPath := filepath.Join(envDir, ".env")
-	return fsutil.WriteFile(envPath, []byte(envText), 0o640)
+	return fs.WriteFile(envPath, []byte(envText), 0o640)
 }
 
 // ReadStageEnv loads the current .env contents for the provided stage.
@@ -202,12 +210,12 @@ func DeleteStage(ctx context.Context, stageID string) error {
 	}
 
 	repoPath := paths.OpenHackRepoPath(stage.ID)
-	if err := fsutil.RemoveAll(repoPath); err != nil {
+	if err := fs.RemoveAll(repoPath); err != nil {
 		return err
 	}
 
 	envDir := paths.OpenHackEnvPath(stage.ID)
-	if err := fsutil.RemoveAll(envDir); err != nil {
+	if err := fs.RemoveAll(envDir); err != nil {
 		return err
 	}
 
@@ -220,7 +228,7 @@ func DeleteStage(ctx context.Context, stageID string) error {
 		if test.LogPath == "" {
 			continue
 		}
-		if err := fsutil.Remove(test.LogPath); err != nil {
+		if err := fs.Remove(test.LogPath); err != nil {
 			return err
 		}
 	}

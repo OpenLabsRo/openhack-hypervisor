@@ -45,32 +45,20 @@ func InitDB(deployment string) error {
 		return err
 	}
 
-	db := Client.Database(databaseName)
-	HyperUsers = db.Collection("hyperusers")
-
-	gitCommitCollection := "git_commits"
-	releasesCollection := "releases"
-	stagesCollection := "stages"
-	testsCollection := "tests"
-	deploymentsCollection := "deployments"
-	eventsCollection := "events"
-
+	dbName := databaseName
 	if strings.EqualFold(strings.TrimSpace(deployment), "test") {
-		// Use isolated collections so webhook tests do not mutate production data.
-		gitCommitCollection = "test_git_commits"
-		releasesCollection = "test_releases"
-		stagesCollection = "test_stages"
-		testsCollection = "test_tests"
-		deploymentsCollection = "test_deployments"
-		eventsCollection = "test_events"
+		dbName = "hypervisor_tests"
 	}
 
-	GitCommits = db.Collection(gitCommitCollection)
-	Releases = db.Collection(releasesCollection)
-	Stages = db.Collection(stagesCollection)
-	Tests = db.Collection(testsCollection)
-	Deployments = db.Collection(deploymentsCollection)
-	Events = db.Collection(eventsCollection)
+	db := Client.Database(dbName)
+	HyperUsers = db.Collection("hyperusers")
+
+	GitCommits = db.Collection("git_commits")
+	Releases = db.Collection("releases")
+	Stages = db.Collection("stages")
+	Tests = db.Collection("tests")
+	Deployments = db.Collection("deployments")
+	Events = db.Collection("events")
 
 	return nil
 }

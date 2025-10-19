@@ -16,7 +16,7 @@ import (
 
 	"hypervisor/internal/errmsg"
 	"hypervisor/internal/events"
-	"hypervisor/internal/fsutil"
+	"hypervisor/internal/fs"
 	"hypervisor/internal/models"
 	"hypervisor/internal/paths"
 )
@@ -39,7 +39,7 @@ func StartTest(ctx context.Context, stageID string) (*models.Test, error) {
 	wsToken := fmt.Sprintf("%s-token-%d", stageID, time.Now().UnixNano())
 	logPath := filepath.Join(paths.OpenHackRuntimeLogsDir, fmt.Sprintf("%s.log", resultID))
 
-	if err := fsutil.EnsureDir(filepath.Dir(logPath), 0o755); err != nil {
+	if err := fs.EnsureDir(filepath.Dir(logPath), 0o755); err != nil {
 		return nil, err
 	}
 
@@ -67,12 +67,12 @@ func StartTest(ctx context.Context, stageID string) (*models.Test, error) {
 	}
 
 	repoPath := paths.OpenHackRepoPath(stage.ID)
-	go runTest(context.Background(), repoPath, stage.EnvTag, stage.ID, test)
+	go runTest(context.Background(), repoPath, stage.ID, test)
 
 	return &test, nil
 }
 
-func runTest(ctx context.Context, repoPath, envTag, stageID string, test models.Test) {
+func runTest(ctx context.Context, repoPath, stageID string, test models.Test) {
 	envRoot := paths.OpenHackEnvPath(stageID)
 
 	logFile, err := os.OpenFile(test.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
