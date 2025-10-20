@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os/exec"
 	"path/filepath"
 
 	"hypervisor/internal/hyperctl/build"
@@ -69,6 +70,14 @@ func RunSetup(args []string) error {
 			return fmt.Errorf("failed to clone project: %w", err)
 		}
 		fmt.Printf("Project cloned to %s\n", repoDir)
+
+		// Run API_SPEC
+		cmd := exec.Command("./API_SPEC")
+		cmd.Dir = repoDir
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to run API_SPEC: %w", err)
+		}
+		fmt.Println("API_SPEC executed successfully")
 	}
 
 	// Run test suite (skip in dev mode)
