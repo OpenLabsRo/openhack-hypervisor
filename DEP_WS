@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ROUTE="ws://localhost:8080/ws/deployments/$1/logs/"
+ROUTE="ws://localhost:8080/hypervisor/ws/deployments/$1/logs/"
 echo $ROUTE
 
 wscat --connect $ROUTE \

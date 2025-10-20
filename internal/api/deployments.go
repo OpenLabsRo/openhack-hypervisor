@@ -14,12 +14,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 
 	"hypervisor/internal/core"
-	"hypervisor/internal/db"
 	"hypervisor/internal/errmsg"
 	"hypervisor/internal/events"
 	"hypervisor/internal/fs"
 	"hypervisor/internal/models"
 	"hypervisor/internal/paths"
+	"hypervisor/internal/proxy"
 	"hypervisor/internal/systemd"
 	"hypervisor/internal/utils"
 	"hypervisor/internal/ws"
@@ -88,6 +88,11 @@ func PromoteDeploymentHandler(c fiber.Ctx) error {
 		return utils.StatusError(c, err)
 	}
 
+	// Update proxy with promoted deployment
+	proxy.GlobalRouteMap.UpdateDeployment(dep)
+
+	// Note: main deployment is tracked via PromotedAt in database, no cache needed
+
 	if events.Em != nil {
 		events.Em.DeploymentPromoted(*dep)
 	}
@@ -117,9 +122,13 @@ func ShutdownDeploymentHandler(c fiber.Ctx) error {
 	}
 
 	dep.Status = "stopped"
+	dep.PromotedAt = nil // Clear promotion when shutting down
 	if err := models.UpdateDeployment(context.Background(), *dep); err != nil {
 		return utils.StatusError(c, err)
 	}
+
+	// Update proxy with stopped deployment
+	proxy.GlobalRouteMap.UpdateDeployment(dep)
 
 	if events.Em != nil {
 		events.Em.DeploymentStopped(*dep)
@@ -161,6 +170,9 @@ func DeleteDeploymentHandler(c fiber.Ctx) error {
 		return utils.StatusError(c, err)
 	}
 
+	// Remove from proxy before deleting from database
+	proxy.GlobalRouteMap.RemoveDeployment(deploymentID)
+
 	if err := models.DeleteDeployment(context.Background(), deploymentID); err != nil {
 		return utils.StatusError(c, err)
 	}
@@ -193,7 +205,7 @@ func DeleteDeploymentHandler(c fiber.Ctx) error {
 // @Tags Hypervisor Deployments
 // @Security HyperUserAuth
 // @Param deploymentId path string true "Deployment ID"
-// @Router /ws/deployments/{deploymentId}/logs [get]
+// @Router /hypervisor/ws/deployments/{deploymentId}/logs [get]
 func StreamDeploymentLogs(c fiber.Ctx) error {
 	deploymentID := c.Params("deploymentId")
 
@@ -250,6 +262,8 @@ func CreateDeploymentHandler(c fiber.Ctx) error {
 	if existing, err := models.GetDeploymentByID(context.Background(), stageID); err == nil {
 		// Deployment exists, redeploy it
 		go core.ProvisionDeployment(*existing)
+		// Update proxy with existing deployment
+		proxy.GlobalRouteMap.UpdateDeployment(existing)
 		return c.Status(http.StatusOK).JSON(existing)
 	} else if err != mongo.ErrNoDocuments {
 		// Some other error
@@ -261,6 +275,9 @@ func CreateDeploymentHandler(c fiber.Ctx) error {
 	if err != nil {
 		return utils.StatusError(c, err)
 	}
+
+	// Update proxy with new deployment
+	proxy.GlobalRouteMap.UpdateDeployment(deployment)
 
 	if events.Em != nil {
 		events.Em.DeploymentCreated(*deployment)
@@ -278,13 +295,11 @@ func CreateDeploymentHandler(c fiber.Ctx) error {
 // @Failure 500 {object} errmsg._InternalServerError
 // @Router /hypervisor/routes/main [get]
 func GetMainRouteHandler(c fiber.Ctx) error {
-	deploymentID, err := db.CacheGet("main_deployment")
-	if err != nil {
-		// If not found, return none
-		return c.JSON(fiber.Map{"deploymentId": "none"})
+	if mainDep, exists := proxy.GlobalRouteMap.GetMainDeployment(); exists {
+		return c.JSON(fiber.Map{"deploymentId": mainDep.ID})
 	}
 
-	return c.JSON(fiber.Map{"deploymentId": deploymentID})
+	return c.JSON(fiber.Map{"deploymentId": "none"})
 }
 
 // SetMainRouteHandler sets the main deployment.
@@ -311,15 +326,29 @@ func SetMainRouteHandler(c fiber.Ctx) error {
 	}
 
 	// Validate deployment exists
-	_, err := models.GetDeploymentByID(context.Background(), deploymentID)
+	dep, err := models.GetDeploymentByID(context.Background(), deploymentID)
 	if err != nil {
 		return utils.StatusError(c, errmsg.DeploymentNotFound)
 	}
 
-	// Set in cache
-	if err := db.CacheSet("main_deployment", deploymentID); err != nil {
+	// Clear PromotedAt from current main deployment if any
+	if currentMain, exists := proxy.GlobalRouteMap.GetMainDeployment(); exists && currentMain.ID != deploymentID {
+		currentMain.PromotedAt = nil
+		if err := models.UpdateDeployment(context.Background(), *currentMain); err != nil {
+			return utils.StatusError(c, err)
+		}
+		proxy.GlobalRouteMap.UpdateDeployment(currentMain)
+	}
+
+	// Set PromotedAt on new main deployment
+	now := time.Now()
+	dep.PromotedAt = &now
+	if err := models.UpdateDeployment(context.Background(), *dep); err != nil {
 		return utils.StatusError(c, err)
 	}
 
-	return c.JSON(fiber.Map{"deploymentId": deploymentID})
+	// Update proxy with new main deployment
+	proxy.GlobalRouteMap.UpdateDeployment(dep)
+
+	return c.JSON(fiber.Map{"deploymentId": dep.ID})
 }

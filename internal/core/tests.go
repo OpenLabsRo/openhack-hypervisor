@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +20,12 @@ import (
 	"hypervisor/internal/fs"
 	"hypervisor/internal/models"
 	"hypervisor/internal/paths"
+)
+
+// testCancels tracks cancellable contexts for running tests
+var (
+	testCancels   = make(map[string]context.CancelFunc)
+	testCancelsMu sync.RWMutex
 )
 
 // StartTest bootstraps a manual test run for the provided stage.
@@ -70,12 +77,26 @@ func StartTest(ctx context.Context, stageID string) (*models.Test, error) {
 	}
 
 	repoPath := paths.OpenHackRepoPath(stage.ID)
-	go runTest(context.Background(), repoPath, stage.ID, test)
+
+	// Create cancellable context for the test
+	testCancelsMu.Lock()
+	testCtx, cancel := context.WithCancel(context.Background())
+	testCancels[test.ID] = cancel
+	testCancelsMu.Unlock()
+
+	go runTest(testCtx, repoPath, stage.ID, test)
 
 	return &test, nil
 }
 
 func runTest(ctx context.Context, repoPath, stageID string, test models.Test) {
+	defer func() {
+		// Clean up the cancel function when test finishes
+		testCancelsMu.Lock()
+		delete(testCancels, test.ID)
+		testCancelsMu.Unlock()
+	}()
+
 	envRoot := paths.OpenHackEnvPath(stageID)
 
 	logFile, err := os.OpenFile(test.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
@@ -262,4 +283,27 @@ func tailFile(ctx context.Context, file *os.File, testID string, w io.Writer) er
 			// Continue to the next iteration.
 		}
 	}
+}
+
+// CancelTest cancels a running test if it exists.
+func CancelTest(ctx context.Context, testID string) error {
+	testCancelsMu.RLock()
+	cancel, exists := testCancels[testID]
+	testCancelsMu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("test not found or not running")
+	}
+
+	// Cancel the test
+	cancel()
+
+	// Wait a bit for the test to finish, then clean up
+	time.Sleep(100 * time.Millisecond)
+
+	testCancelsMu.Lock()
+	delete(testCancels, testID)
+	testCancelsMu.Unlock()
+
+	return nil
 }

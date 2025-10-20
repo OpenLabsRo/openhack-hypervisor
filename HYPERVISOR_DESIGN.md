@@ -556,7 +556,7 @@ internal/hyperctl/```
 
 | `POST /stages/:stageId/tests/:resultId/cancel` | Cancel an in-flight stage test (optional, when supported)                                                                                           |
 
-#### fs.go| `GET /.ws/stages/:stageId/tests/:resultId`     | WebSocket for live `./TEST` output associated with the stage test                                                                                   |
+#### fs.go| `GET /hypervisor/ws/stages/:stageId/tests/:resultId`     | WebSocket for live `./TEST` output associated with the stage test                                                                                   |
 
 | `POST /deployments`                            | Promote an `active` stage to a deployment (writes build artifacts + systemd unit, records deployment referencing `stageId`)                         |
 
@@ -780,7 +780,7 @@ WantedBy=multi-user.target## 14. Status codes
 
 ./BUILD --output /var/hypervisor/builds4. Operator may start tests at any time with `POST /stages/:stageId/tests`.
 
-```  → Hypervisor runs`./TEST`against the stage checkout, streams output over`/.ws/stages/:stageId/tests/:resultId`*(WebSocket emitting JSON payloads with`type`=`info`|`log`|`error`)*, and records a `stage_test_result` referencing the stage. Tests are manual; updating the env does **not** auto-run tests.
+```  → Hypervisor runs`./TEST`against the stage checkout, streams output over`/hypervisor/ws/stages/:stageId/tests/:resultId`*(WebSocket emitting JSON payloads with`type`=`info`|`log`|`error`)*, and records a `stage_test_result` referencing the stage. Tests are manual; updating the env does **not** auto-run tests.
 
 5. When ready, operator promotes the stage via `POST /deployments` (payload includes `stageId`).
 
@@ -952,7 +952,7 @@ type Event struct {
 | `GET /hypervisor/stages/:stageId/env`                 | Read the stage `.env` contents from disk               |
 | `PUT /hypervisor/stages/:stageId/env`                 | Update the stage `.env` file (pre → active transition) |
 | `POST /hypervisor/stages/:stageId/tests`              | Start a manual test run for the stage                  |
-| `GET /.ws/stages/:stageId/tests/:resultId`            | WebSocket stream for stage test logs (JSON messages)   |
+| `GET /hypervisor/ws/stages/:stageId/tests/:resultId`  | WebSocket stream for stage test logs (JSON messages)   |
 | `POST /hypervisor/deployments`                        | Promote an active stage to a deployment                |
 | `GET /hypervisor/deployments`                         | List active deployments                                |
 | `POST /hypervisor/deployments/:deploymentId/promote`  | Promote a deployment to main route                     |

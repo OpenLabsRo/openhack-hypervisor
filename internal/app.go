@@ -1,12 +1,14 @@
 package internal
 
 import (
+	"context"
 	"hypervisor/internal/api"
 	"hypervisor/internal/db"
 	"hypervisor/internal/env"
 	"hypervisor/internal/events"
 	"hypervisor/internal/hyperusers"
 	"hypervisor/internal/models"
+	"hypervisor/internal/proxy"
 	"hypervisor/internal/swagger"
 	"log"
 	"strings"
@@ -37,6 +39,15 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 		events.Em = nil
 	}
 
+	// Initialize proxy system
+	if err := proxy.InitProxy(context.Background()); err != nil {
+		log.Fatal("Could not initialize proxy system:", err)
+		return nil
+	}
+
+	// Set up proxy routes (must be before API routes)
+	proxy.GlobalRouteMap.SetupRoutes(app)
+
 	hypervisor := app.Group("/hypervisor")
 
 	meta := hypervisor.Group("/meta")
@@ -58,6 +69,7 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	hypervisor.Delete("/stages/:stageId", models.HyperUserMiddleware, api.DeleteStageHandler)
 	hypervisor.Get("/stages/:stageId/tests", models.HyperUserMiddleware, api.ListTestsHandler)
 	hypervisor.Post("/stages/:stageId/tests", models.HyperUserMiddleware, api.StartTestHandler)
+	hypervisor.Post("/stages/:stageId/tests/:sequence/cancel", models.HyperUserMiddleware, api.CancelTestHandler)
 
 	hypervisor.Post("/deployments/:stageId", models.HyperUserMiddleware, api.CreateDeploymentHandler)
 	hypervisor.Get("/deployments", models.HyperUserMiddleware, api.ListDeploymentsHandler)
@@ -68,7 +80,7 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	hypervisor.Get("/routes/main", models.HyperUserMiddleware, api.GetMainRouteHandler)
 	hypervisor.Put("/routes/main", models.HyperUserMiddleware, api.SetMainRouteHandler)
 
-	ws := app.Group("/ws")
+	ws := hypervisor.Group("/ws")
 	ws.Use(models.HyperUserMiddleware)
 	ws.Get("/stages/:stageId/tests/:sequence", api.StreamTestLogs)
 	ws.Get("/deployments/:deploymentId/logs", api.StreamDeploymentLogs)

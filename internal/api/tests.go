@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"hypervisor/internal/core"
+	"hypervisor/internal/errmsg"
 	"hypervisor/internal/models"
 	"hypervisor/internal/utils"
 	"hypervisor/internal/ws"
@@ -69,7 +70,7 @@ func StartTestHandler(c fiber.Ctx) error {
 // @Security HyperUserAuth
 // @Param stageId path string true "Stage ID"
 // @Param sequence path int true "Test sequence number"
-// @Router /ws/stages/{stageId}/tests/{sequence} [get]
+// @Router /hypervisor/ws/stages/{stageId}/tests/{sequence} [get]
 func StreamTestLogs(c fiber.Ctx) error {
 	stageID := c.Params("stageId") // Note: This is validated by the test.StageID check below
 	sequenceStr := c.Params("sequence")
@@ -104,4 +105,55 @@ func StreamTestLogs(c fiber.Ctx) error {
 
 		return core.StreamLogFile(ctx, test.LogPath, test.ID, writer, writer)
 	})
+}
+
+// CancelTestHandler cancels a running test.
+// @Summary Cancel test
+// @Tags Hypervisor Stages
+// @Security HyperUserAuth
+// @Produce json
+// @Param stageId path string true "Stage ID"
+// @Param sequence path int true "Test sequence number"
+// @Success 200 {object} StatusResponse
+// @Failure 400 {object} errmsg._StageInvalidRequest
+// @Failure 404 {object} errmsg._StageNotFound
+// @Failure 500 {object} errmsg._InternalServerError
+// @Router /hypervisor/stages/{stageId}/tests/{sequence}/cancel [post]
+func CancelTestHandler(c fiber.Ctx) error {
+	stageID := c.Params("stageId")
+	sequenceStr := c.Params("sequence")
+
+	if stageID == "" || sequenceStr == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "missing stage or sequence identifier")
+	}
+
+	sequence := 0
+	if _, err := fmt.Sscanf(sequenceStr, "%d", &sequence); err != nil || sequence <= 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid sequence number")
+	}
+
+	testID := fmt.Sprintf("%s-test-%d", stageID, sequence)
+
+	// Verify the test exists and belongs to the stage
+	test, err := models.GetTestByID(context.Background(), testID)
+	if err != nil {
+		return utils.StatusError(c, errmsg.StageNotFound)
+	}
+
+	if test.StageID != stageID {
+		return utils.StatusError(c, errmsg.StageNotFound)
+	}
+
+	if test.Status != models.TestStatusRunning {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"message": "test is not running",
+			"status":  test.Status,
+		})
+	}
+
+	if err := core.CancelTest(context.Background(), testID); err != nil {
+		return utils.StatusError(c, errmsg.InternalServerError(err))
+	}
+
+	return c.JSON(StatusResponse{Status: "test canceled"})
 }

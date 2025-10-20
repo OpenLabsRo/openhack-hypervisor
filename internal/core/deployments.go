@@ -17,6 +17,7 @@ import (
 	"hypervisor/internal/fs"
 	"hypervisor/internal/models"
 	"hypervisor/internal/paths"
+	"hypervisor/internal/proxy"
 	"hypervisor/internal/systemd"
 )
 
@@ -86,6 +87,9 @@ func ProvisionDeployment(dep models.Deployment) {
 		logger.Log("Failed to update deployment status: %v", err)
 		return
 	}
+
+	// Update proxy routing map with ready deployment
+	proxy.GlobalRouteMap.UpdateDeployment(&dep)
 
 	// Mark stage as promoted now that deployment is ready
 	stage, err := models.GetStageByID(ctx, dep.StageID)
