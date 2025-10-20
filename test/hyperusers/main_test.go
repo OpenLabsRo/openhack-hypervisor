@@ -18,7 +18,7 @@ func TestMain(m *testing.M) {
 
 	flag.Parse()
 
-	app = internal.SetupApp("test", *envRoot, *appVersion)
+	app = internal.SetupApp("hypervisor_test", *envRoot, *appVersion)
 
 	os.Exit(m.Run())
 }

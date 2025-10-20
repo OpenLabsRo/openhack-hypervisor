@@ -14,11 +14,11 @@ var app *fiber.App
 
 func TestMain(m *testing.M) {
 	envRoot := flag.String("env-root", "", "directory containing environment files")
-	appVersion := "v25.19.0.1"
+	appVersion := flag.String("app-version", "", "application version override")
 
 	flag.Parse()
 
-	app = internal.SetupApp("test", *envRoot, appVersion)
+	app = internal.SetupApp("hypervisor_test", *envRoot, *appVersion)
 
 	os.Exit(m.Run())
 }

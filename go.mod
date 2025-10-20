@@ -1,5 +1,7 @@
 module hypervisor
 
+replace backend => ../openhack-backend
+
 go 1.25.1
 
 require (
@@ -8,6 +10,7 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/gofiber/fiber/v3 v3.0.0-rc.1
 	github.com/joho/godotenv v1.5.1
+	github.com/stretchr/testify v1.11.0
 	github.com/swaggo/swag v1.16.6
 	github.com/valyala/fasthttp v1.65.0
 	go.mongodb.org/mongo-driver v1.17.4
@@ -20,6 +23,7 @@ require (
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.6 // indirect
@@ -36,6 +40,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
@@ -50,4 +55,5 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.35.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
