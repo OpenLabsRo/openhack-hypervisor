@@ -28,6 +28,15 @@ func StartTest(ctx context.Context, stageID string) (*models.Test, error) {
 		return nil, errmsg.StageNotFound
 	}
 
+	// If stage is ready, mark as pre until test passes
+	if stage.Status == models.StageStatusReady {
+		stage.Status = models.StageStatusPre
+		stage.UpdatedAt = time.Now()
+		if err := models.UpdateStage(ctx, *stage); err != nil {
+			return nil, err
+		}
+	}
+
 	sequence, err := models.NextTestSequence(ctx, stage.ID)
 	if err != nil {
 		return nil, err
@@ -53,12 +62,6 @@ func StartTest(ctx context.Context, stageID string) (*models.Test, error) {
 	}
 
 	if err := models.CreateTest(ctx, test); err != nil {
-		return nil, err
-	}
-
-	stage.LastTestID = test.ID
-	stage.UpdatedAt = time.Now()
-	if err := models.UpdateStage(ctx, *stage); err != nil {
 		return nil, err
 	}
 
@@ -121,6 +124,13 @@ func runTest(ctx context.Context, repoPath, stageID string, test models.Test) {
 		switch status {
 		case models.TestStatusPassed:
 			events.Em.TestPassed(stageID, test.ID, finishedAt.Sub(test.StartedAt))
+			// Mark stage as ready for deployment
+			stage, err := models.GetStageByID(context.Background(), stageID)
+			if err == nil && stage.Status == models.StageStatusPre {
+				stage.Status = models.StageStatusReady
+				stage.UpdatedAt = time.Now()
+				models.UpdateStage(context.Background(), *stage)
+			}
 		case models.TestStatusCanceled:
 			events.Em.TestCanceled(stageID, test.ID)
 		default:

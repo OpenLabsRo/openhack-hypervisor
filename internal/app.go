@@ -47,6 +47,9 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 
 	hyperusers.Routes(hypervisor)
 
+	hypervisor.Post("/releases/sync", models.HyperUserMiddleware, api.SyncHandler)
+	hypervisor.Get("/releases", models.HyperUserMiddleware, api.ListReleasesHandler)
+
 	hypervisor.Post("/stages", models.HyperUserMiddleware, api.CreateStageHandler)
 	hypervisor.Get("/stages", models.HyperUserMiddleware, api.ListStagesHandler)
 	hypervisor.Get("/stages/:stageId", models.HyperUserMiddleware, api.GetStageHandler)
@@ -56,21 +59,19 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	hypervisor.Get("/stages/:stageId/tests", models.HyperUserMiddleware, api.ListTestsHandler)
 	hypervisor.Post("/stages/:stageId/tests", models.HyperUserMiddleware, api.StartTestHandler)
 
-	hypervisor.Post("/deployments", models.HyperUserMiddleware, api.CreateDeploymentHandler)
-	hypervisor.Get("/releases", models.HyperUserMiddleware, api.ListReleasesHandler)
-	hypervisor.Post("/releases/sync", models.HyperUserMiddleware, api.SyncHandler)
-	hypervisor.Get("/env/template", models.HyperUserMiddleware, api.GetEnvTemplateHandler)
-	hypervisor.Put("/env/template", models.HyperUserMiddleware, api.UpdateEnvTemplateHandler)
+	hypervisor.Post("/deployments/:stageId", models.HyperUserMiddleware, api.CreateDeploymentHandler)
+	hypervisor.Get("/deployments", models.HyperUserMiddleware, api.ListDeploymentsHandler)
+	hypervisor.Get("/deployments/:deploymentId", models.HyperUserMiddleware, api.GetDeploymentHandler)
+	hypervisor.Post("/deployments/:deploymentId/promote", models.HyperUserMiddleware, api.PromoteDeploymentHandler)
+	hypervisor.Post("/deployments/:deploymentId/shutdown", models.HyperUserMiddleware, api.ShutdownDeploymentHandler)
+	hypervisor.Delete("/deployments/:deploymentId", models.HyperUserMiddleware, api.DeleteDeploymentHandler)
+	hypervisor.Get("/routes/main", models.HyperUserMiddleware, api.GetMainRouteHandler)
+	hypervisor.Put("/routes/main", models.HyperUserMiddleware, api.SetMainRouteHandler)
 
-	ws := app.Group("/.ws")
-	ws.Use(func(c fiber.Ctx) error {
-		if !c.Request().Header.IsGet() || !c.Request().Header.ConnectionUpgrade() {
-			return fiber.ErrUpgradeRequired
-		}
-		return c.Next()
-	})
+	ws := app.Group("/ws")
 	ws.Use(models.HyperUserMiddleware)
-	ws.Get("/stages/:stageId/tests/:testId", api.StreamTestLogs)
+	ws.Get("/stages/:stageId/tests/:sequence", api.StreamTestLogs)
+	ws.Get("/deployments/:deploymentId/logs", api.StreamDeploymentLogs)
 
 	return app
 }

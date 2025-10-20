@@ -4,102 +4,104 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
+	"net/http"
 
 	"hypervisor/internal/core"
 	"hypervisor/internal/models"
+	"hypervisor/internal/utils"
 	"hypervisor/internal/ws"
 
-	githubws "github.com/fasthttp/websocket"
 	"github.com/gofiber/fiber/v3"
-	"github.com/valyala/fasthttp"
 )
 
 var errClientClosed = errors.New("websocket closed by client")
 
+// ListTestsHandler lists all tests for a stage.
+// @Summary List tests
+// @Tags Hypervisor Stages
+// @Security HyperUserAuth
+// @Produce json
+// @Param stageId path string true "Stage ID"
+// @Success 200 {array} models.Test
+// @Failure 500 {object} errmsg._InternalServerError
+// @Router /hypervisor/stages/{stageId}/tests [get]
+func ListTestsHandler(c fiber.Ctx) error {
+	stageID := c.Params("stageId")
+	if stageID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "missing stage identifier")
+	}
+
+	tests, err := core.ListTests(context.Background(), stageID)
+	if err != nil {
+		return utils.StatusError(c, err)
+	}
+
+	return c.JSON(tests)
+}
+
+// StartTestHandler starts a new test run for a stage.
+// @Summary Start test
+// @Tags Hypervisor Stages
+// @Security HyperUserAuth
+// @Produce json
+// @Param stageId path string true "Stage ID"
+// @Success 201 {object} models.Test
+// @Failure 404 {object} errmsg._StageNotFound
+// @Failure 500 {object} errmsg._InternalServerError
+// @Router /hypervisor/stages/{stageId}/tests [post]
+func StartTestHandler(c fiber.Ctx) error {
+	stageID := c.Params("stageId")
+	if stageID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "missing stage identifier")
+	}
+
+	test, err := core.StartTest(context.Background(), stageID)
+	if err != nil {
+		return utils.StatusError(c, err)
+	}
+
+	return c.Status(http.StatusCreated).JSON(test)
+}
+
 // StreamTestLogs upgrades the connection and continuously streams a test log.
+// @Summary Stream test logs
+// @Tags Hypervisor Stages
+// @Security HyperUserAuth
+// @Param stageId path string true "Stage ID"
+// @Param sequence path int true "Test sequence number"
+// @Router /ws/stages/{stageId}/tests/{sequence} [get]
 func StreamTestLogs(c fiber.Ctx) error {
 	stageID := c.Params("stageId") // Note: This is validated by the test.StageID check below
-	testID := c.Params("testId")
+	sequenceStr := c.Params("sequence")
 
-	if stageID == "" || testID == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "missing stage or test identifier")
+	if stageID == "" || sequenceStr == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "missing stage or sequence identifier")
 	}
 
-	type requestCtxProvider interface {
-		RequestCtx() *fasthttp.RequestCtx
+	sequence := 0
+	if _, err := fmt.Sscanf(sequenceStr, "%d", &sequence); err != nil || sequence <= 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid sequence number")
 	}
 
-	provider, ok := any(c).(requestCtxProvider)
-	if !ok {
-		return fiber.ErrInternalServerError
-	}
+	testID := fmt.Sprintf("%s-test-%d", stageID, sequence)
 
-	return ws.Upgrader.Upgrade(provider.RequestCtx(), func(conn *githubws.Conn) {
-		defer conn.Close()
-
-		ctx := context.Background()
-
+	return ws.StreamWebSocket(c, func(ctx context.Context, writer *ws.WebsocketLogWriter) error {
 		test, err := models.GetTestByID(ctx, testID)
 		if err != nil {
-			_ = ws.WriteStatus(conn, "error", fmt.Sprintf("test not found: %v", err))
-			return
+			writer.WriteStatus("error", fmt.Sprintf("test not found: %v", err))
+			return err
 		}
 
 		if test.StageID != stageID {
-			_ = ws.WriteStatus(conn, "error", "test does not belong to the requested stage")
-			return
+			writer.WriteStatus("error", "test does not belong to the requested stage")
+			return errors.New("test does not belong to stage")
 		}
 
 		if test.LogPath == "" {
-			_ = ws.WriteStatus(conn, "error", "log path is not available for this test run")
-			return
+			writer.WriteStatus("error", "log path is not available for this test run")
+			return errors.New("log path not available")
 		}
 
-		closed := make(chan struct{})
-		var once sync.Once
-		go func() {
-			for {
-				if _, _, err := conn.ReadMessage(); err != nil {
-					once.Do(func() { close(closed) })
-					return
-				}
-			}
-		}()
-
-		// Create a writer that sends log lines over the WebSocket connection.
-		wsWriter := &websocketLogWriter{conn: conn}
-
-		// Use a cancellable context tied to the client connection.
-		streamCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		go func() {
-			<-closed
-			cancel()
-		}()
-
-		err = core.StreamLogFile(streamCtx, test.LogPath, test.ID, wsWriter, wsWriter)
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, errClientClosed) {
-			_ = ws.WriteStatus(conn, "error", fmt.Sprintf("log stream failed: %v", err))
-		}
-
-		_ = ws.WriteStatus(conn, "info", "log stream ended")
+		return core.StreamLogFile(ctx, test.LogPath, test.ID, writer, writer)
 	})
-}
-
-// websocketLogWriter is an io.Writer that sends messages over a WebSocket.
-type websocketLogWriter struct {
-	conn *githubws.Conn
-}
-
-func (w *websocketLogWriter) Write(p []byte) (n int, err error) {
-	if err := ws.WriteLog(w.conn, p); err != nil {
-		// Use a specific error to signal that the client has disconnected.
-		return 0, errClientClosed
-	}
-	return len(p), nil
-}
-
-func (w *websocketLogWriter) WriteStatus(level, message string) {
-	_ = ws.WriteStatus(w.conn, level, message)
 }

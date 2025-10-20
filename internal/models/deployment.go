@@ -16,6 +16,7 @@ type Deployment struct {
 	EnvTag     string     `bson:"envTag" json:"envTag"`
 	Port       *int       `bson:"port,omitempty" json:"port,omitempty"`
 	Status     string     `bson:"status" json:"status"` // staged|ready|stopped|deleted
+	LogPath    string     `bson:"logPath,omitempty" json:"logPath,omitempty"`
 	CreatedAt  time.Time  `bson:"createdAt" json:"createdAt"`
 	PromotedAt *time.Time `bson:"promotedAt,omitempty" json:"promotedAt,omitempty"`
 }
@@ -32,4 +33,28 @@ func GetDeploymentByID(ctx context.Context, id string) (*Deployment, error) {
 		return nil, err
 	}
 	return &d, nil
+}
+
+func GetAllDeployments(ctx context.Context) ([]Deployment, error) {
+	cursor, err := db.Deployments.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var deployments []Deployment
+	if err := cursor.All(ctx, &deployments); err != nil {
+		return nil, err
+	}
+	return deployments, nil
+}
+
+func UpdateDeployment(ctx context.Context, dep Deployment) error {
+	_, err := db.Deployments.ReplaceOne(ctx, bson.M{"id": dep.ID}, dep)
+	return err
+}
+
+func DeleteDeployment(ctx context.Context, id string) error {
+	_, err := db.Deployments.DeleteOne(ctx, bson.M{"id": id})
+	return err
 }

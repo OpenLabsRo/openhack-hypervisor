@@ -13,7 +13,7 @@ type StageStatus string
 
 const (
 	StageStatusPre      StageStatus = "pre"
-	StageStatusActive   StageStatus = "active"
+	StageStatusReady    StageStatus = "ready"
 	StageStatusPromoted StageStatus = "promoted"
 )
 
@@ -24,7 +24,6 @@ type Stage struct {
 	EnvTag       string      `bson:"envTag" json:"envTag"`
 	Status       StageStatus `bson:"status" json:"status"`
 	TestSequence int         `bson:"testSequence,omitempty" json:"testSequence,omitempty"`
-	LastTestID   string      `bson:"lastTestId,omitempty" json:"lastTestId,omitempty"`
 	CreatedAt    time.Time   `bson:"createdAt" json:"createdAt"`
 	UpdatedAt    time.Time   `bson:"updatedAt" json:"updatedAt"`
 }
@@ -60,7 +59,6 @@ func UpdateStage(ctx context.Context, stage Stage) error {
 		"$set": bson.M{
 			"status":       stage.Status,
 			"testSequence": stage.TestSequence,
-			"lastTestId":   stage.LastTestID,
 			"updatedAt":    stage.UpdatedAt.UTC(),
 		},
 	})

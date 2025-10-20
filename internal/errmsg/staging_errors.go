@@ -27,6 +27,10 @@ var (
 		http.StatusBadRequest,
 		"invalid deployment request payload",
 	)
+	DeploymentNotFound = NewStatusError(
+		http.StatusNotFound,
+		"deployment not found",
+	)
 )
 
 type _StageInvalidRequest struct {
@@ -57,4 +61,9 @@ type _StageMissingEnv struct {
 type _DeploymentInvalidRequest struct {
 	StatusCode int    `json:"statusCode" example:"400"`
 	Message    string `json:"message" example:"invalid deployment request payload"`
+}
+
+type _DeploymentNotFound struct {
+	StatusCode int    `json:"statusCode" example:"404"`
+	Message    string `json:"message" example:"deployment not found"`
 }

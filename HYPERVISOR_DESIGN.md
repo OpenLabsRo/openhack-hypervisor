@@ -360,7 +360,37 @@ Removing /var/hypervisor...  "stageId": "v25.10.17.0-dev",
 
 Removing /var/openhack...  "version": "v25.10.17.0",
 
-Uninstallation complete. All hypervisor and OpenHack data has been removed.  "envTag": "dev",
+Uninstallation complete. All hypervisor and OpenHack data has been removed.
+
+```
+
+### 3.4 Ping Command
+
+**Purpose:** Check the health of the running Hypervisor service.
+
+```bash
+
+hyperctl ping
+
+```
+
+**Flags:** None.
+
+**Workflow:**
+
+1. Poll the Hypervisor's `/hypervisor/meta/ping` endpoint (default `http://localhost:8080/hypervisor/meta/ping`).
+2. Retry up to 30 times with 1-second intervals.
+3. Return success if any attempt returns "PONG", error if all fail.
+
+**Example output:**
+
+```
+
+PONG
+
+```
+
+### 3.5 Version Command  "envTag": "dev",
 
 ```  "port": 20037,                  # nullable; staged deployments have no port yet
 
@@ -440,7 +470,7 @@ Prints the command list and basic usage.- Events are buffered through an interna
 
 - Convenience wrappers (`internal/events/*.go`) set consistent actor/target constants such as `ActorHyperUser`, `ActorSystem`, ensuring consumers see predictable `actorRole`/`targetType` values.
 
-## 3.7 Hyperctl Directory Structure
+## 3.8 Hyperctl Directory Structure
 
 Example event:
 
@@ -496,11 +526,11 @@ internal/hyperctl/```
 
    └─ testing.go             # Runs `go test ./...`
 
-```## 8. API (all under `/hypervisor`)
+```## 9. API (all under `/hypervisor`)
 
 
 
-### 3.8 Hyperctl Subsystem Specifications| Endpoint                                       | Description                                                                                                                                         |
+### 3.9 Hyperctl Subsystem Specifications| Endpoint                                       | Description                                                                                                                                         |
 
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 
@@ -560,7 +590,7 @@ internal/hyperctl/```
 
 
 
-#### health.go## 9. Routing behavior
+#### health.go## 10. Routing behavior
 
 
 
@@ -584,7 +614,7 @@ internal/hyperctl/```
 
   - `CheckPrerequisites() error` — Verifies availability of: `git`, `go`, `systemctl`, `bash`, and `sudo`.
 
-  - `ResolveEditor() string` — Returns the editor from `$EDITOR` environment variable, or defaults to `vi` if unset.## 10. Swagger documentation
+  - `ResolveEditor() string` — Returns the editor from `$EDITOR` environment variable, or defaults to `vi` if unset.## 11. Swagger documentation
 
 
 
@@ -604,7 +634,7 @@ internal/hyperctl/```
 
   - `DisableHypervisorService() error` — Runs `systemctl disable openhack-hypervisor.service`.
 
-  - `RemoveServiceFile() error` — Deletes `/lib/systemd/system/openhack-hypervisor.service`.## 11. Project structure
+  - `RemoveServiceFile() error` — Deletes `/lib/systemd/system/openhack-hypervisor.service`.## 12. Project structure
 
   - `ReloadSystemd() error` — Runs `systemctl daemon-reload`.
 
@@ -652,7 +682,7 @@ openhack-hypervisor/
 
 **File:** `internal/hyperctl/systemd/openhack-hypervisor.service`
 
-## 12. Environment variables
+## 13. Environment variables
 
 ````ini
 
@@ -702,7 +732,7 @@ Environment=GODEBUG=madvdontneed=1
 
 [Install]
 
-WantedBy=multi-user.target## 13. Status codes
+WantedBy=multi-user.target## 14. Status codes
 
 ````
 
@@ -732,7 +762,7 @@ WantedBy=multi-user.target## 13. Status codes
 
 ---
 
-## 14. Behavioral sequence
+## 15. Behavioral sequence
 
 ## 5. Build & Test Conventions
 
@@ -750,7 +780,7 @@ WantedBy=multi-user.target## 13. Status codes
 
 ./BUILD --output /var/hypervisor/builds4. Operator may start tests at any time with `POST /stages/:stageId/tests`.
 
-```  → Hypervisor runs`./TEST`against the stage checkout, streams output over`/.ws/stages/:stageId/tests/:resultId` *(WebSocket emitting JSON payloads with `type` = `info`|`log`|`error`)*, and records a `stage_test_result` referencing the stage. Tests are manual; updating the env does **not** auto-run tests.
+```  → Hypervisor runs`./TEST`against the stage checkout, streams output over`/.ws/stages/:stageId/tests/:resultId`*(WebSocket emitting JSON payloads with`type`=`info`|`log`|`error`)*, and records a `stage_test_result` referencing the stage. Tests are manual; updating the env does **not** auto-run tests.
 
 5. When ready, operator promotes the stage via `POST /deployments` (payload includes `stageId`).
 
@@ -772,7 +802,7 @@ WantedBy=multi-user.target## 13. Status codes
 
 # Example:
 
-./TEST --env-root /var/openhack/env/v25.10.17.0-dev --app-version v25.10.17.0-dev## 15. Design principles
+./TEST --env-root /var/openhack/env/v25.10.17.0-dev --app-version v25.10.17.0-dev## 16. Design principles
 
 ```
 
@@ -823,11 +853,15 @@ WantedBy=multi-user.target## 13. Status codes
   "releaseId": "v25.10.17.0",
   "envTag": "dev",
   "status": "pre|active|promoted",
-  "lastTestResultId": "tr_7yQ",
+  "testSequence": 3,
   "createdAt": "...",
   "updatedAt": "..."
 }
 ```
+
+Environment contents are stored on disk at `/var/openhack/env/<stageId>/.env`; the API reads and writes this file directly.
+
+The `testSequence` field tracks the number of test runs for this stage, incremented by 1 starting from 1 for each new test. This allows generating unique test IDs like `v25.10.17.0-dev-test-1`, `v25.10.17.0-dev-test-2`, etc.
 
 ### stage_test_results
 
@@ -1148,7 +1182,7 @@ Additional keys may be provided as needed by the backend application.
 
 ---
 
-## 16. Security Considerations
+## 17. Security Considerations
 
 - Keep secrets (JWT_SECRET, MONGO_URI, REDIS credentials) in `.env` files; never commit to repository.
 - Hyperctl operations (especially `hiroshima`) require `sudo` for systemd access; restrict to trusted operators.

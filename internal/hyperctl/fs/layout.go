@@ -1,8 +1,10 @@
 package fs
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/user"
@@ -119,4 +121,22 @@ func runSudo(args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// WriteFileWithSudo writes a file using sudo if necessary.
+func WriteFileWithSudo(path string, data []byte, perm os.FileMode) error {
+	// Always use sudo for systemd files to avoid permission issues
+	cmd := exec.Command("sudo", "tee", path)
+	cmd.Stdin = bytes.NewReader(data)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sudo tee %s failed: %w", path, err)
+	}
+
+	if err := runSudo("chmod", fmt.Sprintf("%04o", perm), path); err != nil {
+		return fmt.Errorf("sudo chmod %s failed: %w", path, err)
+	}
+
+	return nil
 }

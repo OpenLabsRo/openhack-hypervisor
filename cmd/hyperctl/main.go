@@ -24,12 +24,14 @@ func main() {
 		return
 	case "version":
 		err = commands.RunVersion(args)
-	case "setup":
-		err = commands.RunSetup(args)
+	case "manhattan":
+		err = commands.RunManhattan(args)
 	case "hiroshima":
 		err = commands.RunHiroshima(args)
 	case "nagasaki":
 		err = commands.RunNagasaki(args)
+	case "ping":
+		err = commands.RunPing(args)
 	default:
 		fmt.Fprintf(os.Stderr, "hyperctl: unknown command %q\n", cmd)
 		commands.PrintUsage()

@@ -139,11 +139,8 @@ func UpdateStageEnv(ctx context.Context, stageID string, envText string) (*model
 		return nil, err
 	}
 
-	stage.LastTestID = ""
 	stage.UpdatedAt = time.Now()
-	if stage.Status == models.StageStatusPre {
-		stage.Status = models.StageStatusActive
-	}
+	// Status remains "pre" until a test passes
 
 	if err := models.UpdateStage(ctx, *stage); err != nil {
 		return nil, err
@@ -163,18 +160,30 @@ func PromoteStage(ctx context.Context, stageID string) (*models.Deployment, erro
 		return nil, errmsg.StageNotFound
 	}
 
-	if stage.Status == models.StageStatusPre {
+	if stage.Status != models.StageStatusReady {
 		return nil, errmsg.StageMissingEnv
 	}
 
+	// Allocate port
+	port, err := AllocatePort(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	deploymentID := stageID
+	logPath := filepath.Join(paths.OpenHackRuntimeLogsDir, fmt.Sprintf("%s-deploy.log", deploymentID))
+	if err := fs.EnsureDir(filepath.Dir(logPath), 0o755); err != nil {
+		return nil, err
+	}
+
 	deployment := models.Deployment{
 		ID:         deploymentID,
 		Version:    stage.ReleaseID,
 		EnvTag:     stage.EnvTag,
 		StageID:    stage.ID,
-		Port:       nil,
-		Status:     "staged",
+		Port:       &port,
+		Status:     "provisioning",
+		LogPath:    logPath,
 		CreatedAt:  time.Now(),
 		PromotedAt: nil,
 	}
@@ -186,14 +195,11 @@ func PromoteStage(ctx context.Context, stageID string) (*models.Deployment, erro
 		return nil, err
 	}
 
+	// Launch goroutine for provisioning
+	go ProvisionDeployment(deployment)
+
 	if events.Em != nil {
 		events.Em.DeploymentCreated(deployment)
-	}
-
-	stage.Status = models.StageStatusPromoted
-	stage.UpdatedAt = time.Now()
-	if err := models.UpdateStage(ctx, *stage); err != nil {
-		return &deployment, err
 	}
 
 	return &deployment, nil

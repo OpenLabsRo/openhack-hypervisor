@@ -4,8 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"time"
 
 	"hypervisor/internal/hyperctl/build"
 	fsops "hypervisor/internal/hyperctl/fs"
@@ -22,10 +25,10 @@ const (
 	hypervisorRepoURL = "https://github.com/OpenLabsRo/openhack-hypervisor"
 )
 
-// RunSetup handles the `hyperctl setup` subcommand.
-func RunSetup(args []string) error {
+// RunManhattan handles the `hyperctl manhattan` subcommand.
+func RunManhattan(args []string) error {
 	// Parse command-line flags
-	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	fs := flag.NewFlagSet("manhattan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	dev := fs.Bool("dev", false, "Development mode: use current directory instead of cloning")
 
@@ -130,27 +133,52 @@ func RunSetup(args []string) error {
 	}
 	fmt.Println("State saved")
 
-	// Reload systemd and verify service
-	fmt.Println("Reloading systemd...")
-	if err := systemd.ReloadSystemd(); err != nil {
-		return fmt.Errorf("failed to reload systemd: %w", err)
-	}
-	fmt.Println("Systemd reloaded")
-
+	// Final health verification
 	fmt.Println("Checking service status...")
 	if err := systemd.CheckServiceStatus(); err != nil {
 		return fmt.Errorf("service status check failed: %w", err)
 	}
 	fmt.Println("Service is active")
 
+	// Configure sudoers for passwordless commands
+	fmt.Println("Configuring sudoers for passwordless commands...")
+	if err := configureSudoers(); err != nil {
+		return fmt.Errorf("failed to configure sudoers: %w", err)
+	}
+	fmt.Println("Sudoers configured")
+
 	// Final health verification
 	fmt.Println("Performing health check...")
+	time.Sleep(2 * time.Second) // Give the service time to fully start
 	if err := health.Check(); err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
 	fmt.Println("Health check passed")
 
 	fmt.Println("Setup completed successfully.")
+
+	return nil
+}
+
+// configureSudoers adds a sudoers file for passwordless commands.
+func configureSudoers() error {
+	sudoUser := os.Getenv("SUDO_USER")
+	if sudoUser == "" {
+		// Fallback to current user if not run with sudo
+		if u, err := user.Current(); err == nil {
+			sudoUser = u.Username
+		} else {
+			return fmt.Errorf("unable to determine user")
+		}
+	}
+
+	content := fmt.Sprintf(`%s ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/tee, /usr/bin/chmod, /usr/bin/rm
+`, sudoUser)
+
+	sudoersFile := "/etc/sudoers.d/hypervisor"
+	if err := fsops.WriteFileWithSudo(sudoersFile, []byte(content), 0o440); err != nil {
+		return fmt.Errorf("failed to write sudoers file: %w", err)
+	}
 
 	return nil
 }
