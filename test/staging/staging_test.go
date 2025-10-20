@@ -34,7 +34,9 @@ func TestCreateAndListStage(t *testing.T) {
 
 	// Create a stage
 	createBody, createStatusCode := helpers.API_CreateStage(t, app, payload.Token, releaseID, "test")
-	require.Equal(t, http.StatusCreated, createStatusCode)
+	if createStatusCode != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d. body: %s", http.StatusCreated, createStatusCode, string(createBody))
+	}
 
 	var createPayload struct {
 		Stage models.Stage `json:"stage"`

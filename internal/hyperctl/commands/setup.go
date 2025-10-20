@@ -58,6 +58,14 @@ func RunSetup(args []string) error {
 		return err
 	}
 
+	openhackEnvTemplatePath := fsops.OpenHackEnvTemplatePath()
+	if err := fsops.EnsureEnvDirFor(openhackEnvTemplatePath); err != nil {
+		return err
+	}
+	if err := fsops.EditEnvFileIfMissing("OpenHack Backend Template", openhackEnvTemplatePath, editor); err != nil {
+		return err
+	}
+
 	// Clone or use local project repository
 	fmt.Println("Cloning the project...")
 	var repoDir string

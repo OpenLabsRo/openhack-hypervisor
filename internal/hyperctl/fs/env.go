@@ -15,9 +15,9 @@ func HypervisorEnvPath() string {
 	return filepath.Join(paths.HypervisorEnvDir, ".env")
 }
 
-// OpenHackEnvPath returns the absolute path to the OpenHack backend .env file.
-func OpenHackEnvPath() string {
-	return filepath.Join(paths.OpenHackEnvDir, ".env")
+// OpenHackEnvTemplatePath returns the absolute path to the OpenHack backend template .env file.
+func OpenHackEnvTemplatePath() string {
+	return filepath.Join(paths.OpenHackEnvTemplateDir, ".env")
 }
 
 // EnsureEnvDirFor creates the parent directory for the provided env file path if missing.
