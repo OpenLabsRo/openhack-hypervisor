@@ -140,7 +140,7 @@ func UpdateStageEnv(ctx context.Context, stageID string, envText string) (*model
 	}
 
 	stage.UpdatedAt = time.Now()
-	// Status remains "pre" until a test passes
+	stage.Status = models.StageStatusReady
 
 	if err := models.UpdateStage(ctx, *stage); err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func PromoteStage(ctx context.Context, stageID string) (*models.Deployment, erro
 		EnvTag:     stage.EnvTag,
 		StageID:    stage.ID,
 		Port:       &port,
-		Status:     "provisioning",
+		Status:     models.DeploymentStatusProvisioning,
 		LogPath:    logPath,
 		CreatedAt:  time.Now(),
 		PromotedAt: nil,

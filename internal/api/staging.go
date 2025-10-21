@@ -20,6 +20,7 @@ import (
 type createStageRequest struct {
 	ReleaseID string `json:"releaseId"`
 	EnvTag    string `json:"envTag"`
+	EnvText   string `json:"envText,omitempty"` // Optional - if provided, stage will be marked as ready
 }
 
 type StageResponse struct {
@@ -66,9 +67,21 @@ func CreateStageHandler(c fiber.Ctx) error {
 		return utils.StatusError(c, err)
 	}
 
-	envText, err := core.ReadStageEnv(stage.ID)
-	if err != nil {
-		return utils.StatusError(c, errmsg.InternalServerError(err))
+	envText := req.EnvText
+	if envText == "" {
+		// If no envText provided, read the template
+		var readErr error
+		envText, readErr = core.ReadStageEnv(stage.ID)
+		if readErr != nil {
+			return utils.StatusError(c, errmsg.InternalServerError(readErr))
+		}
+	} else {
+		// If envText was provided, update the stage with it (marks as ready)
+		updatedStage, err := core.UpdateStageEnv(context.Background(), stage.ID, envText)
+		if err != nil {
+			return utils.StatusError(c, err)
+		}
+		stage = updatedStage
 	}
 
 	return c.Status(http.StatusCreated).JSON(StageResponse{Stage: *stage, EnvText: envText})

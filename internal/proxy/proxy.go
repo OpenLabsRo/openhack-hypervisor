@@ -32,7 +32,7 @@ func (rm *RouteMap) UpdateDeployment(dep *models.Deployment) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
-	if dep.Status == "ready" {
+	if dep.Status == models.DeploymentStatusReady {
 		rm.deployments[dep.StageID] = dep
 	} else {
 		delete(rm.deployments, dep.StageID)
@@ -189,7 +189,7 @@ func (rm *RouteMap) LoadFromDatabase(ctx context.Context) error {
 
 	for _, dep := range deployments {
 		dep := dep // copy
-		if dep.Status == "ready" {
+		if dep.Status == models.DeploymentStatusReady {
 			rm.deployments[dep.StageID] = &dep
 		}
 		if dep.PromotedAt != nil {

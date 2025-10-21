@@ -46,8 +46,12 @@ func InitDB(deployment string) error {
 	}
 
 	dbName := databaseName
-	if strings.EqualFold(strings.TrimSpace(deployment), "test") {
+	dep := strings.ToLower(strings.TrimSpace(deployment))
+	if dep == "test" {
 		dbName = "hypervisor_tests"
+	} else if dep == "dev" {
+		// Use a separate development database to avoid clobbering prod
+		dbName = "hypervisor_dev"
 	}
 
 	db := Client.Database(dbName)

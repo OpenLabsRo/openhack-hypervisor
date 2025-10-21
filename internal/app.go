@@ -60,26 +60,48 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 
 	hypervisor.Post("/releases/sync", models.HyperUserMiddleware, api.SyncHandler)
 	hypervisor.Get("/releases", models.HyperUserMiddleware, api.ListReleasesHandler)
+	// hypervisor.Get("/releases/webhook", models.HyperUserMiddleware, api.ListReleasesHandler)  for the GitHub webhook integration
 
+	hypervisor.Get("/env/template", models.HyperUserMiddleware, api.GetEnvTemplateHandler)
+	hypervisor.Post("/env/template/validate", models.HyperUserMiddleware, api.UpdateEnvTemplateHandler)
+
+	// creating and listing stages
 	hypervisor.Post("/stages", models.HyperUserMiddleware, api.CreateStageHandler)
 	hypervisor.Get("/stages", models.HyperUserMiddleware, api.ListStagesHandler)
+
+	// getting and deleteing a certain stage
 	hypervisor.Get("/stages/:stageId", models.HyperUserMiddleware, api.GetStageHandler)
+	hypervisor.Delete("/stages/:stageId", models.HyperUserMiddleware, api.DeleteStageHandler)
+
+	// getting and modifying a stage's environment
 	hypervisor.Get("/stages/:stageId/env", models.HyperUserMiddleware, api.GetStageEnvHandler)
 	hypervisor.Put("/stages/:stageId/env", models.HyperUserMiddleware, api.UpdateStageEnvHandler)
-	hypervisor.Delete("/stages/:stageId", models.HyperUserMiddleware, api.DeleteStageHandler)
+
+	// getting the list of tests, and starting a test
 	hypervisor.Get("/stages/:stageId/tests", models.HyperUserMiddleware, api.ListTestsHandler)
 	hypervisor.Post("/stages/:stageId/tests", models.HyperUserMiddleware, api.StartTestHandler)
+
+	// cancelling a test
 	hypervisor.Post("/stages/:stageId/tests/:sequence/cancel", models.HyperUserMiddleware, api.CancelTestHandler)
 
+	// creating a deployment based on a stage ID
 	hypervisor.Post("/deployments/:stageId", models.HyperUserMiddleware, api.CreateDeploymentHandler)
-	hypervisor.Get("/deployments", models.HyperUserMiddleware, api.ListDeploymentsHandler)
-	hypervisor.Get("/deployments/:deploymentId", models.HyperUserMiddleware, api.GetDeploymentHandler)
-	hypervisor.Post("/deployments/:deploymentId/promote", models.HyperUserMiddleware, api.PromoteDeploymentHandler)
-	hypervisor.Post("/deployments/:deploymentId/shutdown", models.HyperUserMiddleware, api.ShutdownDeploymentHandler)
-	hypervisor.Delete("/deployments/:deploymentId", models.HyperUserMiddleware, api.DeleteDeploymentHandler)
-	hypervisor.Get("/routes/main", models.HyperUserMiddleware, api.GetMainRouteHandler)
-	hypervisor.Put("/routes/main", models.HyperUserMiddleware, api.SetMainRouteHandler)
 
+	// getting a list of deployments
+	hypervisor.Get("/deployments", models.HyperUserMiddleware, api.ListDeploymentsHandler)
+
+	// getting and deleting a certain deployment
+	hypervisor.Get("/deployments/:deploymentId", models.HyperUserMiddleware, api.GetDeploymentHandler)
+	hypervisor.Delete("/deployments/:deploymentId", models.HyperUserMiddleware, api.DeleteDeploymentHandler)
+
+	// either promoting or shutting down a deployment
+	hypervisor.Post("/deployments/:deploymentId/promote", models.HyperUserMiddleware, api.PromoteDeploymentHandler)
+
+	// shutting down and starting a deployment
+	hypervisor.Post("/deployments/:deploymentId/shutdown", models.HyperUserMiddleware, api.ShutdownDeploymentHandler)
+	hypervisor.Post("/deployments/:deploymentId/start", models.HyperUserMiddleware, api.StartDeploymentHandler)
+
+	// websockets for streaming test logs and deployment logs
 	ws := hypervisor.Group("/ws")
 	ws.Use(models.HyperUserMiddleware)
 	ws.Get("/stages/:stageId/tests/:sequence", api.StreamTestLogs)

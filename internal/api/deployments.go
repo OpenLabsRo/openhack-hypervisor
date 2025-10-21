@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -121,7 +120,7 @@ func ShutdownDeploymentHandler(c fiber.Ctx) error {
 		return utils.StatusError(c, err)
 	}
 
-	dep.Status = "stopped"
+	dep.Status = models.DeploymentStatusStopped
 	dep.PromotedAt = nil // Clear promotion when shutting down
 	if err := models.UpdateDeployment(context.Background(), *dep); err != nil {
 		return utils.StatusError(c, err)
@@ -132,6 +131,44 @@ func ShutdownDeploymentHandler(c fiber.Ctx) error {
 
 	if events.Em != nil {
 		events.Em.DeploymentStopped(*dep)
+	}
+
+	return c.JSON(dep)
+}
+
+// StartDeploymentHandler starts a stopped deployment.
+// @Summary Start deployment
+// @Tags Hypervisor Deployments
+// @Security HyperUserAuth
+// @Produce json
+// @Param deploymentId path string true "Deployment ID"
+// @Success 200 {object} models.Deployment
+// @Failure 404 {object} errmsg._DeploymentNotFound
+// @Failure 500 {object} errmsg._InternalServerError
+// @Router /hypervisor/deployments/{deploymentId}/start [post]
+func StartDeploymentHandler(c fiber.Ctx) error {
+	deploymentID := c.Params("deploymentId")
+	dep, err := models.GetDeploymentByID(context.Background(), deploymentID)
+	if err != nil {
+		return utils.StatusError(c, errmsg.DeploymentNotFound)
+	}
+
+	// Start the backend service via systemctl
+	cmd := exec.Command("systemctl", "start", systemd.ServiceName(deploymentID))
+	if err := cmd.Run(); err != nil {
+		return utils.StatusError(c, err)
+	}
+
+	dep.Status = models.DeploymentStatusReady
+	if err := models.UpdateDeployment(context.Background(), *dep); err != nil {
+		return utils.StatusError(c, err)
+	}
+
+	// Update proxy with restarted deployment
+	proxy.GlobalRouteMap.UpdateDeployment(dep)
+
+	if events.Em != nil {
+		events.Em.DeploymentCreated(*dep)
 	}
 
 	return c.JSON(dep)
@@ -156,7 +193,7 @@ func DeleteDeploymentHandler(c fiber.Ctx) error {
 	}
 
 	force := c.Query("force") == "true"
-	if force && dep.Status == "ready" {
+	if force && dep.Status == models.DeploymentStatusReady {
 		if err := systemd.StopBackendService(deploymentID); err != nil {
 			return utils.StatusError(c, err)
 		}
@@ -220,7 +257,7 @@ func StreamDeploymentLogs(c fiber.Ctx) error {
 			return err
 		}
 
-		if dep.Status == "ready" {
+		if dep.Status == models.DeploymentStatusReady {
 			// Stream runtime logs from journalctl
 			return streamJournalctl(ctx, deploymentID, writer)
 		} else {
@@ -260,11 +297,54 @@ func CreateDeploymentHandler(c fiber.Ctx) error {
 
 	// Check if deployment already exists for this stage
 	if existing, err := models.GetDeploymentByID(context.Background(), stageID); err == nil {
-		// Deployment exists, redeploy it
-		go core.ProvisionDeployment(*existing)
-		// Update proxy with existing deployment
-		proxy.GlobalRouteMap.UpdateDeployment(existing)
-		return c.Status(http.StatusOK).JSON(existing)
+		// Deployment exists. Support forced redeploy via ?force=true
+		force := c.Query("force") == "true"
+		if !force {
+			return utils.StatusError(c, errmsg.DeploymentAlreadyExists)
+		}
+
+		// Force redeploy path: stop and remove previous service and records
+		if existing.Status == models.DeploymentStatusReady {
+			if err := systemd.StopBackendService(existing.ID); err != nil {
+				return utils.StatusError(c, err)
+			}
+		}
+
+		if err := systemd.DisableBackendService(existing.ID); err != nil {
+			return utils.StatusError(c, err)
+		}
+
+		if err := systemd.RemoveBackendServiceFile(existing.ID); err != nil {
+			return utils.StatusError(c, err)
+		}
+
+		// Remove from proxy before deleting from database
+		proxy.GlobalRouteMap.RemoveDeployment(existing.ID)
+
+		if err := models.DeleteDeployment(context.Background(), existing.ID); err != nil {
+			return utils.StatusError(c, err)
+		}
+
+		// Delete the built binary (best-effort)
+		versionWithoutV := strings.TrimPrefix(existing.Version, "v")
+		binaryPath := filepath.Join(paths.OpenHackBuildsDir, versionWithoutV)
+		if err := fs.Remove(binaryPath); err != nil {
+			// Log warning but continue
+			fmt.Printf("Warning: failed to remove binary %s: %v\n", binaryPath, err)
+		}
+
+		// Reset stage status to ready for redeployment
+		stage, err := models.GetStageByID(context.Background(), existing.StageID)
+		if err == nil {
+			stage.Status = models.StageStatusReady
+			stage.UpdatedAt = time.Now()
+			models.UpdateStage(context.Background(), *stage)
+		}
+
+		if events.Em != nil {
+			events.Em.DeploymentDeleted(*existing)
+		}
+
 	} else if err != mongo.ErrNoDocuments {
 		// Some other error
 		return utils.StatusError(c, err)
@@ -284,71 +364,4 @@ func CreateDeploymentHandler(c fiber.Ctx) error {
 	}
 
 	return c.Status(http.StatusCreated).JSON(deployment)
-}
-
-// GetMainRouteHandler gets the current main deployment.
-// @Summary Get main route
-// @Tags Hypervisor Routes
-// @Security HyperUserAuth
-// @Produce json
-// @Success 200 {object} map[string]string
-// @Failure 500 {object} errmsg._InternalServerError
-// @Router /hypervisor/routes/main [get]
-func GetMainRouteHandler(c fiber.Ctx) error {
-	if mainDep, exists := proxy.GlobalRouteMap.GetMainDeployment(); exists {
-		return c.JSON(fiber.Map{"deploymentId": mainDep.ID})
-	}
-
-	return c.JSON(fiber.Map{"deploymentId": "none"})
-}
-
-// SetMainRouteHandler sets the main deployment.
-// @Summary Set main route
-// @Tags Hypervisor Routes
-// @Security HyperUserAuth
-// @Accept json
-// @Produce json
-// @Param payload body map[string]string true "Route payload"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} errmsg._DeploymentInvalidRequest
-// @Failure 404 {object} errmsg._DeploymentNotFound
-// @Failure 500 {object} errmsg._InternalServerError
-// @Router /hypervisor/routes/main [put]
-func SetMainRouteHandler(c fiber.Ctx) error {
-	var req map[string]string
-	if err := json.Unmarshal(c.Body(), &req); err != nil {
-		return utils.StatusError(c, errmsg.DeploymentInvalidRequest)
-	}
-
-	deploymentID, ok := req["deploymentId"]
-	if !ok || deploymentID == "" {
-		return utils.StatusError(c, errmsg.DeploymentInvalidRequest)
-	}
-
-	// Validate deployment exists
-	dep, err := models.GetDeploymentByID(context.Background(), deploymentID)
-	if err != nil {
-		return utils.StatusError(c, errmsg.DeploymentNotFound)
-	}
-
-	// Clear PromotedAt from current main deployment if any
-	if currentMain, exists := proxy.GlobalRouteMap.GetMainDeployment(); exists && currentMain.ID != deploymentID {
-		currentMain.PromotedAt = nil
-		if err := models.UpdateDeployment(context.Background(), *currentMain); err != nil {
-			return utils.StatusError(c, err)
-		}
-		proxy.GlobalRouteMap.UpdateDeployment(currentMain)
-	}
-
-	// Set PromotedAt on new main deployment
-	now := time.Now()
-	dep.PromotedAt = &now
-	if err := models.UpdateDeployment(context.Background(), *dep); err != nil {
-		return utils.StatusError(c, err)
-	}
-
-	// Update proxy with new main deployment
-	proxy.GlobalRouteMap.UpdateDeployment(dep)
-
-	return c.JSON(fiber.Map{"deploymentId": dep.ID})
 }

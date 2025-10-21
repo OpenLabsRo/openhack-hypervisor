@@ -23,6 +23,10 @@ var (
 		http.StatusConflict,
 		"stage is missing an environment update",
 	)
+	DeploymentAlreadyExists = NewStatusError(
+		http.StatusConflict,
+		"deployment already exists",
+	)
 	DeploymentInvalidRequest = NewStatusError(
 		http.StatusBadRequest,
 		"invalid deployment request payload",

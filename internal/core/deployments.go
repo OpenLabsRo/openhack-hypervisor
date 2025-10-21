@@ -30,7 +30,7 @@ func ProvisionDeployment(dep models.Deployment) {
 	logFile, err := os.OpenFile(dep.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
 	if err != nil {
 		log.Printf("Failed to open log file for deployment %s: %v", dep.ID, err)
-		dep.Status = "provision_failed"
+		dep.Status = models.DeploymentStatusProvisionFailed
 		models.UpdateDeployment(ctx, dep)
 		return
 	}
@@ -48,7 +48,7 @@ func ProvisionDeployment(dep models.Deployment) {
 	binaryPath := filepath.Join(buildPath, versionWithoutV)
 	if err := buildBackend(repoPath, buildPath, binaryPath, logFile); err != nil {
 		logger.Log("Build failed: %v", err)
-		dep.Status = "build_failed"
+		dep.Status = models.DeploymentStatusBuildFailed
 		models.UpdateDeployment(ctx, dep)
 		if events.Em != nil {
 			events.Em.DeploymentCreateFailed(dep.ID, err)
@@ -70,7 +70,7 @@ func ProvisionDeployment(dep models.Deployment) {
 	}
 	if err := systemd.InstallBackendService(cfg, logFile); err != nil {
 		logger.Log("Systemd install failed: %v", err)
-		dep.Status = "provision_failed"
+		dep.Status = models.DeploymentStatusProvisionFailed
 		models.UpdateDeployment(ctx, dep)
 		if events.Em != nil {
 			events.Em.DeploymentCreateFailed(dep.ID, err)
@@ -79,33 +79,21 @@ func ProvisionDeployment(dep models.Deployment) {
 	}
 	logger.Log("Systemd service installed and started")
 
-	// Update deployment to ready
-	dep.Status = "ready"
-	dep.PromotedAt = &time.Time{}
-	*dep.PromotedAt = time.Now()
+	// Update deployment to ready. Do NOT auto-promote to main here.
+	// Promotion (making this the main deployment) must be an explicit operator action
+	// so we only mark the deployment as ready and persist it. The Promote API will
+	// handle updating the proxy routing map and marking the stage as promoted.
+	dep.Status = models.DeploymentStatusReady
 	if err := models.UpdateDeployment(ctx, dep); err != nil {
 		logger.Log("Failed to update deployment status: %v", err)
 		return
 	}
 
-	// Update proxy routing map with ready deployment
+	// Make the deployment immediately routable at /<stageID>/* by updating the route map.
+	// Do NOT set PromotedAt here — promotion to main must be explicit.
 	proxy.GlobalRouteMap.UpdateDeployment(&dep)
 
-	// Mark stage as promoted now that deployment is ready
-	stage, err := models.GetStageByID(ctx, dep.StageID)
-	if err == nil {
-		stage.Status = models.StageStatusPromoted
-		stage.UpdatedAt = time.Now()
-		if updateErr := models.UpdateStage(ctx, *stage); updateErr != nil {
-			logger.Log("Failed to update stage status to promoted: %v", updateErr)
-		} else {
-			logger.Log("Stage marked as promoted")
-		}
-	} else {
-		logger.Log("Failed to get stage for promotion: %v", err)
-	}
-
-	logger.Log("Deployment is now ready")
+	logger.Log("Deployment is now ready and routable under its stage (not promoted)")
 
 	if events.Em != nil {
 		events.Em.DeploymentCreated(dep)

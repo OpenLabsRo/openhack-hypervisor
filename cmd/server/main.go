@@ -6,6 +6,28 @@
 // @in header
 // @name Authorization
 // @description Provide the hyperuser bearer token as `Bearer <token>`.
+
+// @Tag.name Hypervisor Meta
+// @Tag.description Operational probes and metadata about the hypervisor service.
+
+// @Tag.name Hypervisor Releases
+// @Tag.description Repository and release synchronization workflows.
+
+// @Tag.name Hypervisor Env
+// @Tag.description Environment management for the service templates.
+
+// @Tag.name Hypervisor Stages
+// @Tag.description Manage stage lifecycle, sessions, and manual tests.
+
+// @Tag.name Hypervisor Deployments
+// @Tag.description Track staged deployment records ready for promotion.
+
+// @Tag.name Hyperusers Meta
+// @Tag.description Lightweight availability checks for hyperuser endpoints.
+
+// @Tag.name Hyperusers Auth
+// @Tag.description Authentication flows for hyperuser operators.
+
 package main
 
 import (
