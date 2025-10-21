@@ -159,7 +159,12 @@ func (rm *RouteMap) SetupRoutes(app *fiber.App) {
 				}
 
 				finalURL := target + remainingPath
-				return proxy.Forward(finalURL)(c)
+				err := proxy.Do(c, finalURL)
+				if err != nil {
+					// Backend service is unreachable - return our custom error
+					return c.Status(404).SendString(`{"message":"no deployment found for this request - check that a deployment exists and is promoted to main"}`)
+				}
+				return nil
 			}
 		}
 
@@ -167,10 +172,16 @@ func (rm *RouteMap) SetupRoutes(app *fiber.App) {
 		if mainDep, exists := rm.GetMainDeployment(); exists && mainDep.Port != nil {
 			target := fmt.Sprintf("http://localhost:%d", *mainDep.Port)
 			finalURL := target + path
-			return proxy.Forward(finalURL)(c)
+			err := proxy.Do(c, finalURL)
+			if err != nil {
+				// Backend service is unreachable - return our custom error
+				return c.Status(404).SendString(`{"message":"no deployment found for this request - check that a deployment exists and is promoted to main"}`)
+			}
+			return nil
 		}
 
-		return c.Next()
+		// No deployment found - return error directly
+		return c.Status(404).SendString(`{"message":"no deployment found for this request - check that a deployment exists and is promoted to main"}`)
 	})
 }
 

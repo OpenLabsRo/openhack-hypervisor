@@ -35,6 +35,14 @@ var (
 		http.StatusNotFound,
 		"deployment not found",
 	)
+	CannotDeleteMainDeployment = NewStatusError(
+		http.StatusConflict,
+		"cannot delete deployment marked as main - demote it first or use force=true",
+	)
+	NoDeploymentFound = NewStatusError(
+		http.StatusNotFound,
+		"no deployment found for this request - check that a deployment exists and is promoted to main",
+	)
 )
 
 type _StageInvalidRequest struct {
@@ -70,4 +78,14 @@ type _DeploymentInvalidRequest struct {
 type _DeploymentNotFound struct {
 	StatusCode int    `json:"statusCode" example:"404"`
 	Message    string `json:"message" example:"deployment not found"`
+}
+
+type _CannotDeleteMainDeployment struct {
+	StatusCode int    `json:"statusCode" example:"409"`
+	Message    string `json:"message" example:"cannot delete deployment marked as main - demote it first or use force=true"`
+}
+
+type _NoDeploymentFound struct {
+	StatusCode int    `json:"statusCode" example:"404"`
+	Message    string `json:"message" example:"no deployment found for this request - check that a deployment exists and is promoted to main"`
 }

@@ -129,6 +129,14 @@ func StopBackendService(deploymentID string) error {
 	return nil
 }
 
+// StartBackendService starts the backend service.
+func StartBackendService(deploymentID string) error {
+	cmd := exec.Command("sudo", "systemctl", "start", serviceName(deploymentID))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // DisableBackendService disables the backend service.
 func DisableBackendService(deploymentID string) error {
 	cmd := exec.Command("sudo", "systemctl", "disable", serviceName(deploymentID))

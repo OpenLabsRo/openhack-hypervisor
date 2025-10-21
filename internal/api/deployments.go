@@ -153,9 +153,7 @@ func StartDeploymentHandler(c fiber.Ctx) error {
 		return utils.StatusError(c, errmsg.DeploymentNotFound)
 	}
 
-	// Start the backend service via systemctl
-	cmd := exec.Command("systemctl", "start", systemd.ServiceName(deploymentID))
-	if err := cmd.Run(); err != nil {
+	if err := systemd.StartBackendService(deploymentID); err != nil {
 		return utils.StatusError(c, err)
 	}
 
@@ -180,9 +178,10 @@ func StartDeploymentHandler(c fiber.Ctx) error {
 // @Security HyperUserAuth
 // @Produce json
 // @Param deploymentId path string true "Deployment ID"
-// @Param force query bool false "Force stop before delete"
+// @Param force query bool false "Force stop before delete, or force delete main deployment"
 // @Success 204
 // @Failure 404 {object} errmsg._DeploymentNotFound
+// @Failure 409 {object} errmsg._CannotDeleteMainDeployment
 // @Failure 500 {object} errmsg._InternalServerError
 // @Router /hypervisor/deployments/{deploymentId} [delete]
 func DeleteDeploymentHandler(c fiber.Ctx) error {
@@ -193,6 +192,12 @@ func DeleteDeploymentHandler(c fiber.Ctx) error {
 	}
 
 	force := c.Query("force") == "true"
+
+	// Prevent deleting main deployment unless force=true
+	if dep.PromotedAt != nil && !force {
+		return utils.StatusError(c, errmsg.CannotDeleteMainDeployment)
+	}
+
 	if force && dep.Status == models.DeploymentStatusReady {
 		if err := systemd.StopBackendService(deploymentID); err != nil {
 			return utils.StatusError(c, err)
@@ -284,9 +289,11 @@ func streamJournalctl(ctx context.Context, deploymentID string, writer *ws.Webso
 // @Security HyperUserAuth
 // @Produce json
 // @Param stageId path string true "Stage ID to promote"
+// @Param force query boolean false "Force redeploy: stop and remove existing service, then create new deployment"
 // @Success 201 {object} models.Deployment
 // @Failure 400 {object} errmsg._DeploymentInvalidRequest
 // @Failure 404 {object} errmsg._StageNotFound
+// @Failure 409 {object} errmsg._DeploymentAlreadyExists
 // @Failure 500 {object} errmsg._InternalServerError
 // @Router /hypervisor/deployments/{stageId} [post]
 func CreateDeploymentHandler(c fiber.Ctx) error {
