@@ -31,11 +31,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"hypervisor/internal"
 	"hypervisor/internal/env"
@@ -76,13 +80,38 @@ func main() {
 	app := internal.SetupApp(deploy, *envRoot, *appVersion)
 	swagger.Register(app)
 
-	fmt.Println("APP VERSION:", env.VERSION)
+	fmt.Println("HYPERVISOR VERSION:", env.VERSION)
 
-	if err := app.Listen(fmt.Sprintf(":%s", port), fiber.ListenConfig{
-		EnablePrefork: env.PREFORK,
-	}); err != nil {
-		log.Fatalf("Error listening on port %s: %v", port, err)
+	// Channel to listen for interrupt or terminate signals
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	// Start server in a goroutine
+	go func() {
+		fmt.Printf("Starting server on port %s...\n", port)
+		if err := app.Listen(fmt.Sprintf(":%s", port), fiber.ListenConfig{
+			EnablePrefork: env.PREFORK,
+		}); err != nil {
+			log.Printf("Server error: %v", err)
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-c
+	fmt.Println("\nReceived shutdown signal, gracefully shutting down...")
+
+	// Create a context with timeout for graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Gracefully shutdown the server
+	if err := app.ShutdownWithContext(ctx); err != nil {
+		log.Printf("Server forced to shutdown: %v", err)
+		os.Exit(1)
 	}
+
+	fmt.Println("Server shutdown complete")
+	os.Exit(0)
 }
 
 func ensureHome() {

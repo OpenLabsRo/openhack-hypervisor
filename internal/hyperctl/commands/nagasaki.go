@@ -9,7 +9,7 @@ import (
 )
 
 // RunNagasaki handles the `hyperctl nagasaki` subcommand.
-// This command gracefully stops the running hypervisor service.
+// This command gracefully stops the running hypervisor services (blue and green).
 func RunNagasaki(args []string) error {
 	fs := flag.NewFlagSet("nagasaki", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -18,11 +18,18 @@ func RunNagasaki(args []string) error {
 		return err
 	}
 
-	fmt.Println("Stopping hypervisor service...")
-	if err := systemd.StopHypervisorService(); err != nil {
-		return fmt.Errorf("failed to stop hypervisor service: %w", err)
+	fmt.Println("Stopping hypervisor services (blue and green)...")
+	blueService := "openhack-hypervisor-blue.service"
+	greenService := "openhack-hypervisor-green.service"
+
+	if err := systemd.StopService(blueService); err != nil {
+		return fmt.Errorf("failed to stop blue service: %w", err)
 	}
 
-	fmt.Println("Hypervisor service stopped.")
+	if err := systemd.StopService(greenService); err != nil {
+		return fmt.Errorf("failed to stop green service: %w", err)
+	}
+
+	fmt.Println("Hypervisor services stopped.")
 	return nil
 }

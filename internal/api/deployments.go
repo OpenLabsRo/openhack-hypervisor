@@ -63,6 +63,23 @@ func GetDeploymentHandler(c fiber.Ctx) error {
 	return c.JSON(dep)
 }
 
+// GetRoutingMapHandler returns the current routing map.
+// @Summary Get routing map
+// @Tags Hypervisor Deployments
+// @Security HyperUserAuth
+// @Produce plain
+// @Success 200 {string} string "Routing map as formatted text"
+// @Failure 500 {object} errmsg._InternalServerError
+// @Router /hypervisor/routing [get]
+func GetRoutingMapHandler(c fiber.Ctx) error {
+	if proxy.GlobalRouteMap == nil {
+		return utils.StatusError(c, fmt.Errorf("routing map not initialized"))
+	}
+
+	routingMap := proxy.GlobalRouteMap.GetRoutingMap()
+	return c.SendString(routingMap)
+}
+
 // PromoteDeploymentHandler promotes a deployment to main.
 // @Summary Promote deployment to main
 // @Tags Hypervisor Deployments

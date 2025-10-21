@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"hypervisor/internal/api"
 	"hypervisor/internal/db"
 	"hypervisor/internal/env"
@@ -53,6 +54,9 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	meta := hypervisor.Group("/meta")
 	meta.Get("/ping", hypervisorPingHandler)
 	meta.Get("/version", hypervisorVersionHandler)
+	meta.Get("/drain", hypervisorDrainStatusHandler)
+	meta.Post("/drain", hypervisorDrainHandler)
+	hypervisor.Get("/routing", api.GetRoutingMapHandler)
 
 	swagger.Register(hypervisor)
 
@@ -116,8 +120,13 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 // @Tags Hypervisor Meta
 // @Produce plain
 // @Success 200 {string} string "PONG"
+// @Failure 503 {string} string "Service is draining"
 // @Router /hypervisor/meta/ping [get]
 func hypervisorPingHandler(c fiber.Ctx) error {
+	// In drain mode, return 503 to signal load balancers to stop routing traffic
+	if env.DRAIN_MODE {
+		return c.Status(503).SendString("Service is draining - please route to active instance")
+	}
 	return c.SendString("PONG")
 }
 
@@ -130,4 +139,48 @@ func hypervisorPingHandler(c fiber.Ctx) error {
 // @Router /hypervisor/meta/version [get]
 func hypervisorVersionHandler(c fiber.Ctx) error {
 	return c.SendString("v" + env.VERSION)
+}
+
+// hypervisorDrainHandler toggles drain mode for blue-green deployments.
+// @Summary Toggle drain mode
+// @Description Enables or disables drain mode, causing the service to reject new connections while keeping existing ones alive.
+// @Tags Hypervisor Meta
+// @Accept json
+// @Produce json
+// @Param request body map[string]bool true "Drain mode toggle"
+// @Success 200 {object} map[string]interface{} "Drain mode status"
+// @Failure 400 {object} errmsg._GeneralBadRequest
+// @Router /hypervisor/meta/drain [post]
+func hypervisorDrainHandler(c fiber.Ctx) error {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Note: This is a runtime toggle. In production, you might want to persist this
+	// or use a more robust mechanism like updating a config file that gets reloaded
+	env.DRAIN_MODE = req.Enabled
+
+	return c.JSON(fiber.Map{
+		"drain_mode": env.DRAIN_MODE,
+		"message":    fmt.Sprintf("Drain mode %s", map[bool]string{true: "enabled", false: "disabled"}[env.DRAIN_MODE]),
+	})
+}
+
+// hypervisorDrainStatusHandler returns the current drain mode status.
+// @Summary Get drain mode status
+// @Description Returns whether drain mode is currently enabled.
+// @Tags Hypervisor Meta
+// @Produce json
+// @Success 200 {object} map[string]bool "Drain mode status"
+// @Router /hypervisor/meta/drain [get]
+func hypervisorDrainStatusHandler(c fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"drain_mode": env.DRAIN_MODE,
+	})
 }

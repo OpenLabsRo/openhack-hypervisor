@@ -126,6 +126,40 @@ func (rm *RouteMap) printRoutingMap() {
 	fmt.Println("==================")
 }
 
+// GetRoutingMap returns the current routing configuration as a formatted string
+func (rm *RouteMap) GetRoutingMap() string {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	result := "=== Routing Map ===\n"
+
+	if rm.mainID != "" {
+		if mainDep, exists := rm.deployments[rm.mainID]; exists && mainDep.Port != nil {
+			result += fmt.Sprintf("Main (/): %s (stage: %s) -> localhost:%d\n", rm.mainID, mainDep.StageID, *mainDep.Port)
+		} else {
+			result += fmt.Sprintf("Main (/): %s (no port assigned)\n", rm.mainID)
+		}
+	} else {
+		result += "Main (/): none\n"
+	}
+
+	if len(rm.deployments) > 0 {
+		result += "Stages:\n"
+		for stageID, dep := range rm.deployments {
+			if dep.Port != nil {
+				result += fmt.Sprintf("  /%s/* -> localhost:%d\n", stageID, *dep.Port)
+			} else {
+				result += fmt.Sprintf("  /%s/* -> no port assigned\n", stageID)
+			}
+		}
+	} else {
+		result += "Stages: none\n"
+	}
+
+	result += "=================="
+	return result
+}
+
 // SetupRoutes sets up the proxy routes on the Fiber app
 func (rm *RouteMap) SetupRoutes(app *fiber.App) {
 	// Single middleware that handles all proxy routing

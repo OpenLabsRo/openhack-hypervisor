@@ -16,3 +16,10 @@ func CloneOrPull(repoURL, destDir string) error {
 	cmd.Dir = destDir
 	return cmd.Run()
 }
+
+// Checkout checks out a specific branch, tag, or commit in the repository.
+func Checkout(repoDir, ref string) error {
+	cmd := exec.Command("git", "checkout", ref)
+	cmd.Dir = repoDir
+	return cmd.Run()
+}

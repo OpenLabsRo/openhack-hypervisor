@@ -32,6 +32,12 @@ func main() {
 		err = commands.RunNagasaki(args)
 	case "ping":
 		err = commands.RunPing(args)
+	case "interstate":
+		err = commands.RunInterstate(args)
+	case "trinity":
+		err = commands.RunTrinity(args)
+	case "swaddle":
+		err = commands.RunSwaddle(args)
 	default:
 		fmt.Fprintf(os.Stderr, "hyperctl: unknown command %q\n", cmd)
 		commands.PrintUsage()

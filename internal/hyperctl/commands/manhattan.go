@@ -109,19 +109,39 @@ func RunManhattan(args []string) error {
 	}
 	fmt.Printf("Build complete: %s\n", buildResult.BinaryPath)
 
-	// Install and configure systemd service
-	fmt.Println("Installing systemd unit for hypervisor...")
-	cfg := systemd.ServiceConfig{
+	// Install and configure systemd services (blue and green)
+	fmt.Println("Installing systemd units for hypervisor (blue and green)...")
+
+	deployment := "prod"
+	if *dev {
+		deployment = "dev"
+	}
+
+	// Blue service (port 8080)
+	blueCfg := systemd.ServiceConfig{
 		BinaryPath: buildResult.BinaryPath,
-		Deployment: "prod",
+		Deployment: deployment,
 		Port:       "8080",
 		EnvRoot:    paths.HypervisorEnvDir,
 		Version:    buildResult.Version,
 	}
-	if err := systemd.InstallHypervisorService(cfg); err != nil {
+	if err := systemd.InstallHypervisorService(blueCfg, "blue"); err != nil {
 		return err
 	}
-	fmt.Println("Systemd unit installed")
+
+	// Green service (port 8081)
+	greenCfg := systemd.ServiceConfig{
+		BinaryPath: buildResult.BinaryPath,
+		Deployment: deployment,
+		Port:       "8081",
+		EnvRoot:    paths.HypervisorEnvDir,
+		Version:    buildResult.Version,
+	}
+	if err := systemd.InstallHypervisorService(greenCfg, "green"); err != nil {
+		return err
+	}
+
+	fmt.Println("Systemd units installed (blue on 8080, green on 8081)")
 
 	// Persist installation state
 	fmt.Println("Persisting installation state...")
@@ -135,10 +155,13 @@ func RunManhattan(args []string) error {
 
 	// Final health verification
 	fmt.Println("Checking service status...")
-	if err := systemd.CheckServiceStatus(); err != nil {
-		return fmt.Errorf("service status check failed: %w", err)
+	if err := systemd.CheckServiceStatus("blue"); err != nil {
+		return fmt.Errorf("blue service status check failed: %w", err)
 	}
-	fmt.Println("Service is active")
+	if err := systemd.CheckServiceStatus("green"); err != nil {
+		return fmt.Errorf("green service status check failed: %w", err)
+	}
+	fmt.Println("Services are active (blue on 8080, green on 8081)")
 
 	// Configure sudoers for passwordless commands
 	fmt.Println("Configuring sudoers for passwordless commands...")

@@ -23,8 +23,18 @@ type ServiceConfig struct {
 }
 
 // InstallHypervisorService writes the hypervisor unit file and reloads systemd.
-func InstallHypervisorService(cfg ServiceConfig) error {
-	if err := writeHypervisorUnit(cfg); err != nil {
+func InstallHypervisorService(cfg ServiceConfig, serviceSuffix ...string) error {
+	suffix := ""
+	if len(serviceSuffix) > 0 {
+		suffix = "-" + serviceSuffix[0]
+	}
+
+	serviceName := HypervisorServiceName
+	if suffix != "" {
+		serviceName = strings.TrimSuffix(HypervisorServiceName, ".service") + suffix + ".service"
+	}
+
+	if err := writeHypervisorUnit(cfg, serviceName); err != nil {
 		return err
 	}
 
@@ -32,18 +42,18 @@ func InstallHypervisorService(cfg ServiceConfig) error {
 		return fmt.Errorf("systemctl daemon-reload failed: %w", err)
 	}
 
-	if err := runSystemctl("enable", HypervisorServiceName); err != nil {
+	if err := runSystemctl("enable", serviceName); err != nil {
 		return fmt.Errorf("systemctl enable failed: %w", err)
 	}
 
-	if err := runSystemctl("restart", HypervisorServiceName); err != nil {
+	if err := runSystemctl("restart", serviceName); err != nil {
 		return fmt.Errorf("systemctl restart failed: %w", err)
 	}
 
 	return nil
 }
 
-func writeHypervisorUnit(cfg ServiceConfig) error {
+func writeHypervisorUnit(cfg ServiceConfig, serviceName string) error {
 	data, err := HypervisorService.ReadFile(HypervisorServiceName)
 	if err != nil {
 		return fmt.Errorf("failed to read embedded unit: %w", err)
@@ -61,7 +71,7 @@ func writeHypervisorUnit(cfg ServiceConfig) error {
 		return fmt.Errorf("failed to render unit template: %w", err)
 	}
 
-	target := filepath.Join(paths.SystemdUnitDir, HypervisorServiceName)
+	target := filepath.Join(paths.SystemdUnitDir, serviceName)
 	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 		if !errors.Is(err, os.ErrPermission) && !os.IsPermission(err) {
 			return fmt.Errorf("failed to remove existing unit file: %w", err)
@@ -151,6 +161,23 @@ func StopHypervisorService() error {
 	return nil
 }
 
+// StopService stops a systemd service by name if it is installed.
+func StopService(serviceName string) error {
+	cmd := exec.Command("sudo", "systemctl", "stop", serviceName)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if exitErr.ExitCode() == 5 {
+				return nil // Service not loaded, ignore
+			}
+		}
+		return fmt.Errorf("systemctl stop %s failed: %w", serviceName, err)
+	}
+	return nil
+}
+
 // DisableHypervisorService disables the hypervisor service.
 func DisableHypervisorService() error {
 	cmd := exec.Command("sudo", "systemctl", "disable", HypervisorServiceName)
@@ -176,8 +203,15 @@ func ReloadSystemd() error {
 }
 
 // CheckServiceStatus verifies that the hypervisor service is active.
-func CheckServiceStatus() error {
-	cmd := exec.Command("systemctl", "is-active", HypervisorServiceName)
+func CheckServiceStatus(serviceName ...string) error {
+	name := HypervisorServiceName
+	if len(serviceName) > 0 {
+		if serviceName[0] != "" {
+			name = strings.TrimSuffix(HypervisorServiceName, ".service") + "-" + serviceName[0] + ".service"
+		}
+	}
+
+	cmd := exec.Command("systemctl", "is-active", name)
 	output, err := cmd.Output()
 	if err != nil {
 		return err

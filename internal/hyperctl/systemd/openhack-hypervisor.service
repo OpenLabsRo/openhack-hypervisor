@@ -13,7 +13,6 @@ ExecStart={{.BinaryPath}} \
 WorkingDirectory=/var/hypervisor
 Restart=always
 RestartSec=1s
-StartLimitIntervalSec=30
 StartLimitBurst=10
 StandardOutput=journal
 StandardError=journal

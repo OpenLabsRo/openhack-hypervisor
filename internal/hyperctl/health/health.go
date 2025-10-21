@@ -3,11 +3,17 @@ package health
 import (
 	"fmt"
 	"net/http"
+	"os"
 )
 
 // Check performs a health check on the hypervisor service.
 func Check() error {
-	url := "http://localhost:8080/hypervisor/meta/ping"
+	host := os.Getenv("HYPERVISOR_HOST")
+	if host == "" {
+		host = "localhost:8080"
+	}
+
+	url := fmt.Sprintf("http://%s/hypervisor/meta/ping", host)
 	resp, err := http.Get(url)
 	if err != nil {
 		return err

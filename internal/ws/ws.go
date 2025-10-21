@@ -3,6 +3,8 @@ package ws
 import (
 	"encoding/json"
 
+	"hypervisor/internal/env"
+
 	githubws "github.com/fasthttp/websocket"
 	"github.com/valyala/fasthttp"
 )
@@ -10,6 +12,12 @@ import (
 // Upgrader upgrades HTTP connections to WebSocket connections.
 var Upgrader = githubws.FastHTTPUpgrader{
 	CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
+		// In drain mode, reject new WebSocket connections with 503
+		if env.DRAIN_MODE {
+			ctx.SetStatusCode(503)
+			ctx.SetBodyString(`{"error": "Service is draining - please reconnect to active instance"}`)
+			return false
+		}
 		return true
 	},
 }
