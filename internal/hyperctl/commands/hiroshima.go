@@ -49,11 +49,45 @@ func RunHiroshima(args []string) error {
 
 	// Stop all backend services
 	fmt.Println("Stopping all backend services...")
-	stopCmd := exec.Command("bash", "-c", "systemctl list-units --no-legend --state=active,failed | grep openhack-backend | awk '{print $1}' | xargs -r systemctl stop")
+	stopCmd := exec.Command("bash", "-c", "systemctl list-units --no-legend --state=active,failed | grep openhack-backend | awk '{print $1}' | xargs -r sudo systemctl stop")
 	if output, err := stopCmd.CombinedOutput(); err != nil {
 		fmt.Printf("Warning: Failed to stop some backend services: %v\n%s\n", err, string(output))
 	} else {
 		fmt.Println("Backend services stopped.")
+	}
+
+	// Remove backend service unit files
+	fmt.Println("Removing backend service unit files...")
+	removeBackendCmd := exec.Command("sudo", "rm", "-f", "/lib/systemd/system/openhack-backend-*.service")
+	if output, err := removeBackendCmd.CombinedOutput(); err != nil {
+		fmt.Printf("Warning: Failed to remove backend service files: %v\n%s\n", err, string(output))
+	} else {
+		fmt.Println("Backend service files removed.")
+	}
+
+	// Disable and remove blue/green hypervisor services
+	fmt.Println("Disabling and removing blue/green hypervisor services...")
+	disableBlueCmd := exec.Command("sudo", "systemctl", "disable", "openhack-hypervisor-blue.service")
+	if err := disableBlueCmd.Run(); err != nil {
+		fmt.Printf("Warning: Failed to disable blue service: %v\n", err)
+	}
+	disableGreenCmd := exec.Command("sudo", "systemctl", "disable", "openhack-hypervisor-green.service")
+	if err := disableGreenCmd.Run(); err != nil {
+		fmt.Printf("Warning: Failed to disable green service: %v\n", err)
+	}
+	removeBlueCmd := exec.Command("sudo", "rm", "-f", "/lib/systemd/system/openhack-hypervisor-blue.service")
+	if err := removeBlueCmd.Run(); err != nil {
+		fmt.Printf("Warning: Failed to remove blue service file: %v\n", err)
+	}
+	removeGreenCmd := exec.Command("sudo", "rm", "-f", "/lib/systemd/system/openhack-hypervisor-green.service")
+	if err := removeGreenCmd.Run(); err != nil {
+		fmt.Printf("Warning: Failed to remove green service file: %v\n", err)
+	}
+
+	// Reload systemd daemon
+	fmt.Println("Reloading systemd daemon...")
+	if err := systemd.ReloadSystemd(); err != nil {
+		fmt.Printf("Warning: Failed to reload systemd: %v\n", err)
 	}
 
 	// Remove all created directories
