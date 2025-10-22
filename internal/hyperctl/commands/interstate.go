@@ -16,8 +16,12 @@ func RunInterstate(args []string) error {
 	}
 
 	// Check if hypervisor service is running
-	if err := health.Check(); err != nil {
-		return fmt.Errorf("hypervisor service is not running - please set it up first using 'hyperctl manhattan'")
+	if err := health.CheckHost("localhost:8080"); err != nil {
+		return fmt.Errorf("hypervisor blue service is not running - please set it up first using 'hyperctl manhattan'")
+	}
+
+	if err := health.CheckHost("localhost:8081"); err != nil {
+		return fmt.Errorf("hypervisor green service is not running - please set it up first using 'hyperctl manhattan'")
 	}
 
 	// Get hypervisor host

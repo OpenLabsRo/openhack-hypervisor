@@ -25,8 +25,12 @@ func RunSwaddle(args []string) error {
 	fmt.Println("Installing nginx configuration for hypervisor...")
 
 	// Check if hypervisor service is running
-	if err := health.Check(); err != nil {
-		return fmt.Errorf("hypervisor service is not running - cannot install config without active service")
+	if err := health.CheckHost("localhost:8080"); err != nil {
+		return fmt.Errorf("hypervisor blue service is not running - cannot install config without active service")
+	}
+
+	if err := health.CheckHost("localhost:8081"); err != nil {
+		return fmt.Errorf("hypervisor green service is not running - cannot install config without active service")
 	}
 
 	if *install {

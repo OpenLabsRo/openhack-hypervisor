@@ -12,8 +12,8 @@ func RunPing(args []string) error {
 		return fmt.Errorf("ping: unexpected arguments")
 	}
 
-	// Use the same health check logic as the setup command.
-	if err := health.Check(); err != nil {
+	// Use a single health check without retries.
+	if err := health.CheckOnce(); err != nil {
 		return fmt.Errorf("hypervisor is not responding: %w", err)
 	}
 

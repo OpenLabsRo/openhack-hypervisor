@@ -13,3 +13,8 @@ type _InternalServerError struct {
 	StatusCode int    `json:"statusCode" example:"500"`
 	Message    string `json:"message" example:"internal server error: <details>"`
 }
+
+type _GeneralBadRequest struct {
+	StatusCode int    `json:"statusCode" example:"400"`
+	Message    string `json:"message" example:"invalid request payload"`
+}

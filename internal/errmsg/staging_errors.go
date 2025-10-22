@@ -89,3 +89,8 @@ type _NoDeploymentFound struct {
 	StatusCode int    `json:"statusCode" example:"404"`
 	Message    string `json:"message" example:"no deployment found for this request - check that a deployment exists and is promoted to main"`
 }
+
+type _DeploymentAlreadyExists struct {
+	StatusCode int    `json:"statusCode" example:"409"`
+	Message    string `json:"message" example:"deployment already exists"`
+}

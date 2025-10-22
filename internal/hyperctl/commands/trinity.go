@@ -16,6 +16,7 @@ import (
 	"hypervisor/internal/hyperctl/build"
 	fsops "hypervisor/internal/hyperctl/fs"
 	"hypervisor/internal/hyperctl/git"
+	"hypervisor/internal/hyperctl/health"
 	"hypervisor/internal/hyperctl/system"
 	"hypervisor/internal/hyperctl/testing"
 	"hypervisor/internal/paths"
@@ -76,6 +77,17 @@ func RunTrinity(args []string) error {
 
 	fmt.Println("Blue-green deployment completed successfully!")
 	fmt.Println("Both services are now running the updated version.")
+
+	// Final health verification
+	fmt.Println("Performing final health checks...")
+	if err := health.CheckHost("localhost:8080"); err != nil {
+		return fmt.Errorf("blue service final health check failed: %w", err)
+	}
+	if err := health.CheckHost("localhost:8081"); err != nil {
+		return fmt.Errorf("green service final health check failed: %w", err)
+	}
+	fmt.Println("Final health checks passed")
+
 	return nil
 }
 
@@ -86,6 +98,14 @@ func buildAndTestNewVersion(version string, dev bool) error {
 		// Development mode: use current directory
 		fmt.Println("Development mode: using current directory")
 		repoDir := "."
+
+		// Run API_SPEC
+		cmd := exec.Command("./API_SPEC")
+		cmd.Dir = repoDir
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to run API_SPEC: %w", err)
+		}
+		fmt.Println("API_SPEC executed successfully")
 
 		// Read version from current directory
 		versionData, err := os.ReadFile(filepath.Join(repoDir, "VERSION"))
@@ -172,6 +192,13 @@ func buildAndTestNewVersion(version string, dev bool) error {
 
 func updateService(serviceName, apiHost, deployment string) error {
 	fmt.Printf("Draining %s service...\n", serviceName)
+
+	// Health check before enabling drain mode
+	fmt.Printf("Checking %s service health before draining...\n", serviceName)
+	if err := health.CheckHost(apiHost); err != nil {
+		return fmt.Errorf("service health check failed before draining: %w", err)
+	}
+
 	if err := enableDrainMode(apiHost, true); err != nil {
 		return fmt.Errorf("failed to enable drain mode: %w", err)
 	}
@@ -202,6 +229,13 @@ func updateService(serviceName, apiHost, deployment string) error {
 	}
 
 	fmt.Printf("Disabling drain mode for %s...\n", serviceName)
+
+	// Health check before disabling drain mode
+	fmt.Printf("Checking %s service health before disabling drain...\n", serviceName)
+	if err := health.CheckHost(apiHost); err != nil {
+		return fmt.Errorf("service health check failed before disabling drain: %w", err)
+	}
+
 	if err := enableDrainMode(apiHost, false); err != nil {
 		return fmt.Errorf("failed to disable drain mode: %w", err)
 	}

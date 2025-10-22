@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"time"
 
 	"hypervisor/internal/hyperctl/build"
 	fsops "hypervisor/internal/hyperctl/fs"
@@ -81,15 +80,15 @@ func RunManhattan(args []string) error {
 			return fmt.Errorf("failed to clone project: %w", err)
 		}
 		fmt.Printf("Project cloned to %s\n", repoDir)
-
-		// Run API_SPEC
-		cmd := exec.Command("./API_SPEC")
-		cmd.Dir = repoDir
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to run API_SPEC: %w", err)
-		}
-		fmt.Println("API_SPEC executed successfully")
 	}
+
+	// Run API_SPEC
+	cmd := exec.Command("./API_SPEC")
+	cmd.Dir = repoDir
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run API_SPEC: %w", err)
+	}
+	fmt.Println("API_SPEC executed successfully")
 
 	// Run test suite (skip in dev mode)
 	if !*dev {
@@ -172,11 +171,13 @@ func RunManhattan(args []string) error {
 
 	// Final health verification
 	fmt.Println("Performing health check...")
-	time.Sleep(2 * time.Second) // Give the service time to fully start
-	if err := health.Check(); err != nil {
-		return fmt.Errorf("health check failed: %w", err)
+	if err := health.CheckHost("localhost:8080"); err != nil {
+		return fmt.Errorf("blue service health check failed: %w", err)
 	}
-	fmt.Println("Health check passed")
+	if err := health.CheckHost("localhost:8081"); err != nil {
+		return fmt.Errorf("green service health check failed: %w", err)
+	}
+	fmt.Println("Health checks passed")
 
 	fmt.Println("Setup completed successfully.")
 

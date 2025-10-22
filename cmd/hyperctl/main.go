@@ -38,6 +38,8 @@ func main() {
 		err = commands.RunTrinity(args)
 	case "swaddle":
 		err = commands.RunSwaddle(args)
+	case "grimhilde":
+		err = commands.RunGrimhilde(args)
 	default:
 		fmt.Fprintf(os.Stderr, "hyperctl: unknown command %q\n", cmd)
 		commands.PrintUsage()
