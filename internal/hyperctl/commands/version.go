@@ -20,7 +20,7 @@ func RunVersion(args []string) error {
 	version, err := state.CurrentVersion()
 	if err != nil {
 		if err == state.ErrStateNotInitialized {
-			fmt.Println("No hypervisor build installed. Run `hyperctl setup` first.")
+			fmt.Println("No hypervisor build installed. Run `hyperctl manhattan` first.")
 			return nil
 		}
 		return err
