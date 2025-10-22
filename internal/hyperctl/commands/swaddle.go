@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 
 	"hypervisor/internal/hyperctl/health"
@@ -45,7 +46,24 @@ func RunSwaddle(args []string) error {
 	}
 
 	fmt.Println("Nginx configuration installed successfully")
-	fmt.Println("Note: Run 'sudo nginx -t' to test configuration and 'sudo systemctl reload nginx' to apply changes")
+
+	fmt.Println("Testing nginx configuration...")
+	cmd := exec.Command("sudo", "nginx", "-t")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("nginx config test failed: %w", err)
+	}
+	fmt.Println("Nginx configuration test passed.")
+
+	fmt.Println("Reloading nginx...")
+	cmd = exec.Command("sudo", "systemctl", "reload", "nginx")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("nginx reload failed: %w", err)
+	}
+	fmt.Println("Nginx reloaded successfully.")
 
 	return nil
 }
