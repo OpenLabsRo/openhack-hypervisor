@@ -11,10 +11,8 @@ import (
 
 // RunGrimhilde handles the `hyperctl grimhilde` subcommand.
 // It fetches and runs the hyperctl installation script to update itself.
+// Arguments are passed through to the script (e.g., --nodeps).
 func RunGrimhilde(args []string) error {
-	if len(args) > 0 {
-		return fmt.Errorf("grimhilde: unexpected arguments")
-	}
 
 	// URL of the installation script
 	scriptURL := "https://dl.openhack.ro/hyperctl_install.sh" // Replace with actual URL
@@ -49,8 +47,8 @@ func RunGrimhilde(args []string) error {
 
 	fmt.Printf("Running update script...\n")
 
-	// Execute the script
-	cmd := exec.Command("bash", scriptPath)
+	// Execute the script with any provided arguments
+	cmd := exec.Command("bash", append([]string{scriptPath}, args...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
