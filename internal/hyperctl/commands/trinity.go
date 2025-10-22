@@ -177,23 +177,25 @@ func buildAndTestNewVersion(version string, dev bool) error {
 		fmt.Printf("Using latest version from main repo: %s\n", targetVersion)
 	}
 
-	// Clone the specific version to versioned directory
+	// Clone the specific version to versioned directory at the tag from local main repo
 	fmt.Printf("Cloning version %s...\n", targetVersion)
 	versionedRepoDir := filepath.Join(paths.HypervisorReposDir, targetVersion)
-	if err := git.CloneOrPull(hypervisorRepoURL, versionedRepoDir); err != nil {
-		return fmt.Errorf("failed to clone version %s: %w", targetVersion, err)
-	}
 
-	// Checkout the specific version/tag
-	ref := targetVersion
-	if !strings.HasPrefix(ref, "v") {
-		ref = "v" + ref
+	// Check if directory already exists
+	if _, err := os.Stat(versionedRepoDir); os.IsNotExist(err) {
+		// Clone directly at the tag from local main repo
+		ref := targetVersion
+		if !strings.HasPrefix(ref, "v") {
+			ref = "v" + ref
+		}
+		cloneCmd := exec.Command("git", "clone", "--branch", ref, mainRepoDir, versionedRepoDir)
+		if output, err := cloneCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git clone --branch failed: %v: %s", err, string(output))
+		}
+		fmt.Printf("Project cloned to %s\n", versionedRepoDir)
+	} else {
+		fmt.Printf("Versioned repo already exists at %s, skipping clone\n", versionedRepoDir)
 	}
-	if err := git.Checkout(versionedRepoDir, ref); err != nil {
-		return fmt.Errorf("failed to checkout version %s: %w", targetVersion, err)
-	}
-
-	fmt.Printf("Project cloned to %s\n", versionedRepoDir)
 
 	// Run API_SPEC
 	cmd := exec.Command("./API_SPEC")

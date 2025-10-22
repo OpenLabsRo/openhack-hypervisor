@@ -2,7 +2,6 @@ package git
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 )
 
@@ -10,14 +9,7 @@ import (
 func CloneOrPull(repoURL, destDir string) error {
 	// Check if destDir is a git repo
 	if out, err := exec.Command("git", "-C", destDir, "rev-parse", "--git-dir").CombinedOutput(); err != nil {
-		// Not a git repo. If destination exists, remove it to allow a fresh clone.
-		if st, statErr := os.Stat(destDir); statErr == nil && st.IsDir() {
-			if rmErr := os.RemoveAll(destDir); rmErr != nil {
-				return fmt.Errorf("destination exists and cannot be removed: %v", rmErr)
-			}
-		}
-
-		// Clone into destDir
+		// Not a git repo or doesn't exist, clone into destDir
 		cmd := exec.Command("git", "clone", repoURL, destDir)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git clone failed: %v: %s", err, string(out))
