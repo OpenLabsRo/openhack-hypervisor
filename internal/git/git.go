@@ -19,7 +19,7 @@ func CloneAndCheckout(repoURL, repoPath, sha string) error {
 		return err
 	}
 
-	cmd := exec.Command("git", "clone", repoURL, repoPath)
+	cmd = exec.Command("git", "clone", repoURL, repoPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git clone failed: %w (%s)", err, string(output))
 	}

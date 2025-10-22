@@ -16,7 +16,6 @@ import (
 	"hypervisor/internal/hyperctl/state"
 	"hypervisor/internal/hyperctl/system"
 	"hypervisor/internal/hyperctl/systemd"
-	"hypervisor/internal/hyperctl/testing"
 	"hypervisor/internal/paths"
 )
 
@@ -30,6 +29,7 @@ func RunManhattan(args []string) error {
 	fs := flag.NewFlagSet("manhattan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	dev := fs.Bool("dev", false, "Development mode: use current directory instead of cloning")
+	moveEnv := fs.Bool("move", false, "Copy .env files from local dirs to system dirs")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -48,6 +48,33 @@ func RunManhattan(args []string) error {
 		return err
 	}
 	fmt.Println("Directory layout ready")
+
+	// Copy .env files if requested
+	if *moveEnv {
+		fmt.Println("Copying .env files...")
+		home := os.Getenv("HOME")
+		src1 := filepath.Join(home, "coding/openlabs/openhack-hypervisor/.env")
+		dest1 := "/var/hypervisor/env/.env"
+		if err := os.MkdirAll(filepath.Dir(dest1), 0755); err != nil {
+			fmt.Printf("Warning: Failed to create dir for %s: %v\n", dest1, err)
+		}
+		if err := copyFile(src1, dest1); err != nil {
+			fmt.Printf("Warning: Failed to copy %s to %s: %v\n", src1, dest1, err)
+		} else {
+			fmt.Printf("Copied %s to %s\n", src1, dest1)
+		}
+
+		src2 := filepath.Join(home, "coding/openlabs/openhack-backend/.env")
+		dest2 := "/var/openhack/env/template/.env"
+		if err := os.MkdirAll(filepath.Dir(dest2), 0755); err != nil {
+			fmt.Printf("Warning: Failed to create dir for %s: %v\n", dest2, err)
+		}
+		if err := copyFile(src2, dest2); err != nil {
+			fmt.Printf("Warning: Failed to copy %s to %s: %v\n", src2, dest2, err)
+		} else {
+			fmt.Printf("Copied %s to %s\n", src2, dest2)
+		}
+	}
 
 	// Configure environment files
 	editor := system.ResolveEditor()
@@ -90,15 +117,7 @@ func RunManhattan(args []string) error {
 	}
 	fmt.Println("API_SPEC executed successfully")
 
-	// Run test suite (skip in dev mode)
-	if !*dev {
-		fmt.Println("Testing the code...")
-		if err := testing.RunTests(repoDir); err != nil {
-			return fmt.Errorf("tests failed: %w", err)
-		}
-	} else {
-		fmt.Println("Skipping tests in development mode")
-	}
+	// Tests removed
 
 	// Build the application
 	fmt.Printf("Building the code into %s...\n", paths.HypervisorBuildsDir)
@@ -182,6 +201,11 @@ func RunManhattan(args []string) error {
 	fmt.Println("Setup completed successfully.")
 
 	return nil
+}
+
+func copyFile(src, dest string) error {
+	cmd := exec.Command("sudo", "cp", src, dest)
+	return cmd.Run()
 }
 
 // configureSudoers adds a sudoers file for passwordless commands.

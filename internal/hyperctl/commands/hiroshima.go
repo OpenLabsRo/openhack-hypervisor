@@ -26,6 +26,7 @@ func RunHiroshima(args []string) error {
 	}
 
 	// Safety confirmation
+
 	if !*confirm {
 		fmt.Println("WARNING: This command will completely remove /var/hypervisor and /var/openhack directories.")
 		fmt.Println("This action is irreversible and will delete all data, configurations, and builds.")
