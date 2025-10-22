@@ -105,7 +105,8 @@ func writeBackendUnit(cfg BackendServiceConfig, logWriter io.Writer) error {
 
 // ServiceName returns the systemd service name for a deployment.
 func ServiceName(deploymentID string) string {
-	return fmt.Sprintf("openhack-backend-%s.service", deploymentID)
+	safeID := strings.ReplaceAll(deploymentID, "/", "-")
+	return fmt.Sprintf("openhack-backend-%s.service", safeID)
 }
 
 func serviceName(deploymentID string) string {

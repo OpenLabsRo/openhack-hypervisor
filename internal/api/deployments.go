@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 
 	"hypervisor/internal/core"
@@ -306,11 +307,9 @@ func streamJournalctl(ctx context.Context, deploymentID string, writer *ws.Webso
 // @Security HyperUserAuth
 // @Produce json
 // @Param stageId path string true "Stage ID to promote"
-// @Param force query boolean false "Force redeploy: stop and remove existing service, then create new deployment"
 // @Success 201 {object} models.Deployment
 // @Failure 400 {object} errmsg._DeploymentInvalidRequest
 // @Failure 404 {object} errmsg._StageNotFound
-// @Failure 409 {object} errmsg._DeploymentAlreadyExists
 // @Failure 500 {object} errmsg._InternalServerError
 // @Router /hypervisor/deployments/{stageId} [post]
 func CreateDeploymentHandler(c fiber.Ctx) error {
@@ -321,13 +320,7 @@ func CreateDeploymentHandler(c fiber.Ctx) error {
 
 	// Check if deployment already exists for this stage
 	if existing, err := models.GetDeploymentByID(context.Background(), stageID); err == nil {
-		// Deployment exists. Support forced redeploy via ?force=true
-		force := c.Query("force") == "true"
-		if !force {
-			return utils.StatusError(c, errmsg.DeploymentAlreadyExists)
-		}
-
-		// Force redeploy path: stop and remove previous service and records
+		// Deployment exists. Always perform full redeploy: stop and remove existing service, then create new deployment
 		if existing.Status == models.DeploymentStatusReady {
 			if err := systemd.StopBackendService(existing.ID); err != nil {
 				return utils.StatusError(c, err)
@@ -387,5 +380,8 @@ func CreateDeploymentHandler(c fiber.Ctx) error {
 		events.Em.DeploymentCreated(*deployment)
 	}
 
-	return c.Status(http.StatusCreated).JSON(deployment)
+	return c.Status(http.StatusCreated).JSON(bson.M{
+		"deployment": deployment,
+		"stageID":    stageID,
+	})
 }
