@@ -1,21 +1,26 @@
 package nginx
 
 import (
+	"bytes"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
 )
 
+//go:embed nginx.conf
+var nginxConf embed.FS
+
 const (
-	// DefaultNginxConfigPath is the default path for nginx configuration
-	DefaultNginxConfigPath = "/etc/nginx/sites-available/hypervisor"
-	// DefaultNginxEnabledPath is the path for enabled nginx sites
-	DefaultNginxEnabledPath = "/etc/nginx/sites-enabled/hypervisor"
+	// DefaultNginxConfigPath is the path where the nginx config will be written
+	// We use conf.d/app.conf which is the common location for drop-in site configs.
+	DefaultNginxConfigPath = "/etc/nginx/conf.d/app.conf"
 )
 
 // Config represents the nginx configuration for the hypervisor
@@ -127,45 +132,47 @@ func WriteConfig(config *Config, outputPath string) error {
 
 // InstallConfig installs the nginx configuration and enables it
 func InstallConfig(configPath string) error {
-	// Copy to sites-available
-	if err := copyFile(configPath, DefaultNginxConfigPath); err != nil {
-		return fmt.Errorf("failed to install config: %w", err)
+	// Read embedded nginx.conf and write to sites-available using sudo if necessary
+	data, err := nginxConf.ReadFile("nginx.conf")
+	if err != nil {
+		return fmt.Errorf("failed to read embedded nginx.conf: %w", err)
 	}
 
-	// Create symlink in sites-enabled
-	if err := os.Symlink(DefaultNginxConfigPath, DefaultNginxEnabledPath); err != nil && !os.IsExist(err) {
-		return fmt.Errorf("failed to enable site: %w", err)
+	// Ensure output directory exists
+	if err := os.MkdirAll(filepath.Dir(DefaultNginxConfigPath), 0o755); err != nil {
+		return fmt.Errorf("failed to create nginx config directory: %w", err)
 	}
+
+	if err := os.WriteFile(DefaultNginxConfigPath, data, 0o644); err != nil {
+		// fallback to sudo tee if permission denied
+		if !os.IsPermission(err) {
+			return fmt.Errorf("failed to write nginx config: %w", err)
+		}
+		cmd := exec.Command("sudo", "tee", DefaultNginxConfigPath)
+		cmd.Stdin = bytes.NewReader(data)
+		cmd.Stdout = io.Discard
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("sudo tee failed: %w", err)
+		}
+	}
+
+	// For conf.d we don't need a symlink; nginx will pick up files in conf.d
 
 	return nil
 }
 
-// copyFile copies a file from src to dst
-func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
+// EmbeddedConfig returns the raw embedded nginx.conf contents.
+func EmbeddedConfig() (string, error) {
+	data, err := nginxConf.ReadFile("nginx.conf")
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	if err != nil {
-		return err
-	}
-
-	// Copy permissions
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	return os.Chmod(dst, srcInfo.Mode())
+	return string(data), nil
 }
+
+// copyFile copies a file from src to dst
+// copyFile removed: we now use embedded nginx.conf
 
 // renderTemplate renders the nginx configuration template
 func renderTemplate(config *Config) (string, error) {

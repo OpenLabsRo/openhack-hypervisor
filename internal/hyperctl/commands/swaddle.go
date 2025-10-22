@@ -3,10 +3,10 @@ package commands
 import (
 	"flag"
 	"fmt"
-	"io"
 	"os"
 
 	"hypervisor/internal/hyperctl/health"
+	"hypervisor/internal/hyperctl/nginx"
 )
 
 // RunSwaddle handles the `hyperctl swaddle` subcommand.
@@ -34,14 +34,11 @@ func RunSwaddle(args []string) error {
 	}
 
 	if *install {
-		// Copy our nginx config to /etc/nginx/conf.d/app.conf
-		srcPath := "internal/hyperctl/nginx/nginx.conf"
-		dstPath := "/etc/nginx/conf.d/app.conf"
-
-		if err := copyFile(srcPath, dstPath); err != nil {
+		// Install embedded nginx config
+		if err := nginx.InstallConfig(""); err != nil {
 			return fmt.Errorf("failed to install nginx config: %w", err)
 		}
-		fmt.Printf("Nginx configuration installed to %s\n", dstPath)
+		fmt.Printf("Nginx configuration installed to %s\n", nginx.DefaultNginxConfigPath)
 
 		// Remove default nginx configurations
 		defaultConfigs := []string{
@@ -60,40 +57,15 @@ func RunSwaddle(args []string) error {
 		fmt.Println("Nginx configuration installed successfully")
 		fmt.Println("Note: Run 'sudo nginx -t' to test configuration and 'sudo systemctl reload nginx' to apply changes")
 	} else {
-		// Just show the config
-		content, err := os.ReadFile("internal/hyperctl/nginx/nginx.conf")
+		// Just show the embedded config
+		content, err := nginx.EmbeddedConfig()
 		if err != nil {
-			return fmt.Errorf("failed to read nginx config: %w", err)
+			return fmt.Errorf("failed to get embedded nginx config: %w", err)
 		}
-		fmt.Print(string(content))
+		fmt.Print(content)
 	}
 
 	return nil
 }
 
-// copyFile copies a file from src to dst
-func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	if err != nil {
-		return err
-	}
-
-	// Copy permissions
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	return os.Chmod(dst, srcInfo.Mode())
-}
+// previous copyFile removed; installation uses embedded nginx content
