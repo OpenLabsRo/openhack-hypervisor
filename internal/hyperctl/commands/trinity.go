@@ -17,6 +17,7 @@ import (
 	fsops "hypervisor/internal/hyperctl/fs"
 	"hypervisor/internal/hyperctl/git"
 	"hypervisor/internal/hyperctl/health"
+	"hypervisor/internal/hyperctl/state"
 	"hypervisor/internal/hyperctl/system"
 	"hypervisor/internal/hyperctl/testing"
 	"hypervisor/internal/paths"
@@ -25,14 +26,40 @@ import (
 // RunTrinity handles the `hyperctl trinity` subcommand.
 // It performs a blue-green deployment: updates blue first, then green.
 func RunTrinity(args []string) error {
-	// Parse command-line flags
-	fs := flag.NewFlagSet("trinity", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	version := fs.String("version", "", "Specific version to build (default: latest)")
-	dev := fs.Bool("dev", false, "Development mode: use current directory instead of cloning")
+	// Parse subcommand
+	var subcommand string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		subcommand = args[0]
+		args = args[1:]
+	}
 
-	if err := fs.Parse(args); err != nil {
-		return err
+	var version string
+	var dev bool
+
+	switch subcommand {
+	case "search":
+		return runTrinitySearch()
+	case "apply":
+		if len(args) == 0 {
+			return fmt.Errorf("apply subcommand requires a version argument")
+		}
+		version = args[0]
+		dev = false
+	case "dev":
+		return runTrinityDev()
+	case "":
+		// Parse command-line flags
+		fs := flag.NewFlagSet("trinity", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		versionPtr := fs.String("version", "", "Specific version to build (default: latest)")
+
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		version = *versionPtr
+		dev = false
+	default:
+		return fmt.Errorf("unknown subcommand %s for trinity", subcommand)
 	}
 
 	fmt.Println("Starting blue-green deployment (Trinity)...")
@@ -50,13 +77,13 @@ func RunTrinity(args []string) error {
 	fmt.Println("Directory layout ready")
 
 	deployment := "prod"
-	if *dev {
+	if dev {
 		deployment = "dev"
 	}
 
 	// Build new version first
 	fmt.Println("Building new version...")
-	if err := buildAndTestNewVersion(*version, *dev); err != nil {
+	if err := buildAndTestNewVersion(version, dev); err != nil {
 		return fmt.Errorf("failed to build new version: %w", err)
 	}
 
@@ -158,7 +185,11 @@ func buildAndTestNewVersion(version string, dev bool) error {
 	}
 
 	// Checkout the specific version/tag
-	if err := git.Checkout(versionedRepoDir, targetVersion); err != nil {
+	ref := targetVersion
+	if !strings.HasPrefix(ref, "v") {
+		ref = "v" + ref
+	}
+	if err := git.Checkout(versionedRepoDir, ref); err != nil {
 		return fmt.Errorf("failed to checkout version %s: %w", targetVersion, err)
 	}
 
@@ -405,4 +436,102 @@ func runCommand(cmd string, args ...string) error {
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 	return command.Run()
+}
+
+func runTrinityDev() error {
+	fmt.Println("Starting development deployment (Trinity dev)...")
+
+	// Verify system requirements
+	if err := system.CheckPrerequisites(); err != nil {
+		return err
+	}
+
+	// Create necessary directories
+	fmt.Println("Ensuring directory layout...")
+	if err := fsops.EnsureLayout(); err != nil {
+		return err
+	}
+	fmt.Println("Directory layout ready")
+
+	deployment := "dev"
+
+	// Build new version from current directory
+	fmt.Println("Building new version...")
+	if err := buildAndTestNewVersion("", true); err != nil {
+		return fmt.Errorf("failed to build dev version: %w", err)
+	}
+
+	// Blue-green deployment sequence
+	fmt.Println("Starting blue-green deployment sequence...")
+
+	// Update BLUE first (8080)
+	fmt.Println("=== UPDATING BLUE (8080) ===")
+	if err := updateService("blue", "localhost:8080", deployment); err != nil {
+		return fmt.Errorf("failed to update blue service: %w", err)
+	}
+
+	// Update GREEN second (8081)
+	fmt.Println("=== UPDATING GREEN (8081) ===")
+	if err := updateService("green", "localhost:8081", deployment); err != nil {
+		return fmt.Errorf("failed to update green service: %w", err)
+	}
+
+	fmt.Println("Development deployment completed successfully!")
+	fmt.Println("Both services are now running the updated version.")
+
+	// Final health verification
+	fmt.Println("Performing final health checks...")
+	if err := health.CheckHost("localhost:8080"); err != nil {
+		return fmt.Errorf("blue service final health check failed: %w", err)
+	}
+	if err := health.CheckHost("localhost:8081"); err != nil {
+		return fmt.Errorf("green service final health check failed: %w", err)
+	}
+	fmt.Println("Final health checks passed")
+
+	return nil
+}
+
+func runTrinitySearch() error {
+	// Clone or update main repo
+	mainRepoDir := filepath.Join(paths.HypervisorReposDir, "main")
+	if err := git.CloneOrPull(hypervisorRepoURL, mainRepoDir); err != nil {
+		return fmt.Errorf("failed to clone main repo: %w", err)
+	}
+
+	// Read latest version from main repo
+	versionData, err := os.ReadFile(filepath.Join(mainRepoDir, "VERSION"))
+	if err != nil {
+		return fmt.Errorf("failed to read VERSION from main repo: %w", err)
+	}
+	latestVersion := strings.TrimSpace(string(versionData))
+	fmt.Printf("Latest version in main repo: %s\n", latestVersion)
+
+	// Get currently installed hypervisor version
+	installedVersion, err := state.CurrentVersion()
+	if err != nil {
+		if err == state.ErrStateNotInitialized {
+			fmt.Println("Currently installed hypervisor version: none (run `hyperctl setup` first)")
+		} else {
+			fmt.Printf("Error getting installed version: %v\n", err)
+		}
+	} else {
+		fmt.Printf("Currently installed hypervisor version: %s\n", installedVersion)
+	}
+
+	// List available tags (versions)
+	cmd := exec.Command("git", "tag", "--sort=-version:refname")
+	cmd.Dir = mainRepoDir
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to list tags: %w", err)
+	}
+
+	fmt.Println("Available versions (tags):")
+	fmt.Print(string(output))
+	fmt.Println("To deploy a specific version, use: hyperctl trinity apply <version>")
+	fmt.Println("To deploy from current directory, use: hyperctl trinity dev")
+	fmt.Printf("Recommended: use the latest version (%s)\n", latestVersion)
+
+	return nil
 }

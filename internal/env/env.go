@@ -32,7 +32,7 @@ func Init(envRoot string, appVersion string) {
 	loadVersion(appVersion)
 
 	PREFORK, _ = strconv.ParseBool(os.Getenv("PREFORK"))
-	DRAIN_MODE, _ = strconv.ParseBool(os.Getenv("DRAIN_MODE"))
+	DRAIN_MODE = false
 	MONGO_URI = os.Getenv("MONGO_URI")
 	JWT_SECRET = []byte(os.Getenv("JWT_SECRET"))
 	GITHUB_WEBHOOK_SECRET = strings.TrimSpace(os.Getenv("GITHUB_WEBHOOK_SECRET"))
