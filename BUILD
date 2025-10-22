@@ -55,6 +55,11 @@ if [[ -z "${VERSION}" ]]; then
 	exit 1
 fi
 
+if ! command -v go >/dev/null 2>&1; then
+	echo "Go is not installed or not in PATH. Please install Go and ensure it's available." >&2
+	exit 1
+fi
+
 : "${GOOS:=linux}"
 : "${GOARCH:=amd64}"
 : "${CGO_ENABLED:=0}"

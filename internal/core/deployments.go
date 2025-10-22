@@ -121,6 +121,12 @@ func buildBackend(repoPath, buildPath, binaryPath string, logWriter io.Writer) e
 		return nil
 	}
 
+	// Check if Go is available
+	checkCmd := exec.Command("sh", "-c", "command -v go >/dev/null 2>&1")
+	if err := checkCmd.Run(); err != nil {
+		return fmt.Errorf("Go is not installed or not in PATH")
+	}
+
 	fmt.Fprintf(logWriter, "[%s] Running ./BUILD command in %s with output %s\n", time.Now().Format("2006-01-02 15:04:05"), repoPath, buildPath)
 	cmd := exec.Command("./BUILD", "--output", buildPath)
 	cmd.Dir = repoPath

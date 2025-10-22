@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 
 	"hypervisor/internal/hyperctl/systemd"
 )
@@ -30,6 +31,15 @@ func RunNagasaki(args []string) error {
 		return fmt.Errorf("failed to stop green service: %w", err)
 	}
 
-	fmt.Println("Hypervisor services stopped.")
+	// Stop all backend services
+	fmt.Println("Stopping all backend services...")
+	stopCmd := exec.Command("bash", "-c", "systemctl list-units --no-legend --state=active,failed | grep openhack-backend | awk '{print $1}' | xargs -r systemctl stop")
+	if output, err := stopCmd.CombinedOutput(); err != nil {
+		fmt.Printf("Warning: Failed to stop some backend services: %v\n%s\n", err, string(output))
+	} else {
+		fmt.Println("Backend services stopped.")
+	}
+
+	fmt.Println("All services stopped.")
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 
 	fsops "hypervisor/internal/hyperctl/fs"
 	"hypervisor/internal/hyperctl/systemd"
@@ -49,10 +50,28 @@ func RunHiroshima(args []string) error {
 		fmt.Printf("Warning: Failed to disable service: %v\n", err)
 	}
 
+	// Stop blue and green services
+	fmt.Println("Stopping blue and green services...")
+	if err := systemd.StopService("openhack-hypervisor-blue.service"); err != nil {
+		fmt.Printf("Warning: Failed to stop blue service: %v\n", err)
+	}
+	if err := systemd.StopService("openhack-hypervisor-green.service"); err != nil {
+		fmt.Printf("Warning: Failed to stop green service: %v\n", err)
+	}
+
 	// Remove the systemd service file
 	fmt.Println("Removing systemd service file...")
 	if err := systemd.RemoveServiceFile(); err != nil {
 		fmt.Printf("Warning: Failed to remove service file: %v\n", err)
+	}
+
+	// Stop all backend services
+	fmt.Println("Stopping all backend services...")
+	stopCmd := exec.Command("bash", "-c", "systemctl list-units --no-legend --state=active,failed | grep openhack-backend | awk '{print $1}' | xargs -r systemctl stop")
+	if output, err := stopCmd.CombinedOutput(); err != nil {
+		fmt.Printf("Warning: Failed to stop some backend services: %v\n%s\n", err, string(output))
+	} else {
+		fmt.Println("Backend services stopped.")
 	}
 
 	// Reload systemd to apply changes

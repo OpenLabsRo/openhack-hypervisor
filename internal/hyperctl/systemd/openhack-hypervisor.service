@@ -16,7 +16,7 @@ RestartSec=1s
 StartLimitBurst=10
 StandardOutput=journal
 StandardError=journal
-Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
 Environment=GODEBUG=madvdontneed=1
 
 [Install]
