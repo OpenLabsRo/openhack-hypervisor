@@ -110,7 +110,7 @@ func writeStageEnvFile(stageID string, envText string) error {
 	}
 
 	envPath := filepath.Join(envDir, ".env")
-	return fs.WriteFile(envPath, []byte(envText), 0o640)
+	return fs.WriteFile(envPath, []byte(envText), 0o666)
 }
 
 // ReadStageEnv loads the current .env contents for the provided stage.

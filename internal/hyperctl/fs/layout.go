@@ -7,8 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/user"
-	"strconv"
 
 	"hypervisor/internal/paths"
 )
@@ -43,22 +41,10 @@ func EnsureLayout() error {
 }
 
 func ensureDirs(dirs []string) error {
-	current, err := user.Current()
-	if err != nil {
-		return fmt.Errorf("failed to lookup current user: %w", err)
-	}
-
-	uid, err := strconv.Atoi(current.Uid)
-	if err != nil {
-		return fmt.Errorf("invalid uid %s: %w", current.Uid, err)
-	}
-
-	gid, err := strconv.Atoi(current.Gid)
-	if err != nil {
-		return fmt.Errorf("invalid gid %s: %w", current.Gid, err)
-	}
-
-	owner := fmt.Sprintf("%s:%s", current.Uid, current.Gid)
+	// Use root ownership for consistency
+	// uid := 0
+	// gid := 0
+	owner := "0:0"
 
 	for _, dir := range dirs {
 		info, statErr := os.Stat(dir)
@@ -74,14 +60,13 @@ func ensureDirs(dirs []string) error {
 			return fmt.Errorf("path exists and is not a directory: %s", dir)
 		}
 
-		if err := os.Chown(dir, uid, gid); err != nil {
-			if os.IsPermission(err) {
-				if err := runSudo("chown", "-R", owner, dir); err != nil {
-					return fmt.Errorf("sudo chown -R %s %s: %w", owner, dir, err)
-				}
-				continue
-			}
-			return fmt.Errorf("failed to chown %s: %w", dir, err)
+		if err := runSudo("chown", "-R", owner, dir); err != nil {
+			return fmt.Errorf("sudo chown -R %s %s: %w", owner, dir, err)
+		}
+
+		// Ensure 0777 permissions for all users
+		if err := runSudo("chmod", "777", dir); err != nil {
+			return fmt.Errorf("failed to chmod 777 %s: %w", dir, err)
 		}
 	}
 
@@ -89,7 +74,7 @@ func ensureDirs(dirs []string) error {
 }
 
 func createDir(path string) error {
-	if err := os.MkdirAll(path, 0o755); err != nil {
+	if err := os.MkdirAll(path, 0o777); err != nil {
 		if !errors.Is(err, os.ErrPermission) && !os.IsPermission(err) {
 			return fmt.Errorf("failed to create %s: %w", path, err)
 		}

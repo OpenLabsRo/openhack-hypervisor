@@ -27,7 +27,15 @@ import (
 func ProvisionDeployment(dep models.Deployment) {
 	ctx := context.Background()
 
-	logFile, err := os.OpenFile(dep.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
+	// Ensure the log directory exists
+	if err := os.MkdirAll(filepath.Dir(dep.LogPath), 0o755); err != nil {
+		log.Printf("Failed to create log directory for deployment %s: %v", dep.ID, err)
+		dep.Status = models.DeploymentStatusProvisionFailed
+		models.UpdateDeployment(ctx, dep)
+		return
+	}
+
+	logFile, err := os.OpenFile(dep.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o666)
 	if err != nil {
 		log.Printf("Failed to open log file for deployment %s: %v", dep.ID, err)
 		dep.Status = models.DeploymentStatusProvisionFailed

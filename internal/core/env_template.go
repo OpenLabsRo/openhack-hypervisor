@@ -31,5 +31,5 @@ func WriteEnvTemplate(contents string) error {
 		return err
 	}
 
-	return os.WriteFile(envTemplatePath(), []byte(contents), 0o640)
+	return os.WriteFile(envTemplatePath(), []byte(contents), 0o666)
 }

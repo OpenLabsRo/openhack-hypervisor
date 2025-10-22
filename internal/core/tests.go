@@ -99,7 +99,7 @@ func runTest(ctx context.Context, repoPath, stageID string, test models.Test) {
 
 	envRoot := paths.OpenHackEnvPath(stageID)
 
-	logFile, err := os.OpenFile(test.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
+	logFile, err := os.OpenFile(test.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o666)
 	if err != nil {
 		finish := time.Now()
 		_ = models.UpdateTestStatus(ctx, test.ID, models.TestStatusError, &finish, err.Error())
