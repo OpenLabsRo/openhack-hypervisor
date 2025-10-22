@@ -48,6 +48,6 @@ func RunInterstate(args []string) error {
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
-	fmt.Print(string(body))
+	fmt.Print(string(body) + "\n")
 	return nil
 }
