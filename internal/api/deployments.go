@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -288,46 +287,14 @@ func StreamDeploymentLogs(c fiber.Ctx) error {
 
 		log.Printf("DEBUG: Deployment found with status=%s", dep.Status)
 
-		if dep.Status == models.DeploymentStatusReady {
-			// Stream runtime logs from journalctl
-			log.Printf("DEBUG: Deployment is ready, streaming from journalctl")
-			return streamJournalctl(ctx, deploymentID, writer)
-		} else {
-			// Stream provisioning logs from file
-			log.Printf("DEBUG: Deployment not ready, streaming from file logPath=%s", dep.LogPath)
-			if dep.LogPath == "" {
-				writer.WriteStatus("error", "log path is not available for this deployment")
-				return errors.New("log path not available")
-			}
-			return core.StreamDeploymentLogFile(ctx, dep.LogPath, deploymentID, writer, writer)
+		// Stream provisioning logs from file
+		log.Printf("DEBUG: Streaming deployment logs from file logPath=%s", dep.LogPath)
+		if dep.LogPath == "" {
+			writer.WriteStatus("error", "log path is not available for this deployment")
+			return errors.New("log path not available")
 		}
+		return core.StreamDeploymentLogFile(ctx, dep.LogPath, deploymentID, writer, writer)
 	})
-}
-
-func streamJournalctl(ctx context.Context, deploymentID string, writer *ws.WebsocketLogWriter) error {
-	serviceName := systemd.ServiceName(deploymentID)
-
-	// Check if service exists first
-	checkCmd := exec.Command("systemctl", "is-active", serviceName)
-	if err := checkCmd.Run(); err != nil {
-		errMsg := fmt.Sprintf("service %s is not active or does not exist", serviceName)
-		writer.WriteStatus("error", errMsg)
-		log.Printf("DEBUG: %s", errMsg)
-		return fmt.Errorf("%s", errMsg)
-	}
-
-	cmd := exec.CommandContext(ctx, "journalctl", "-u", serviceName, "-f", "-n", "100")
-	cmd.Stdout = writer
-	cmd.Stderr = writer
-
-	log.Printf("DEBUG: Running journalctl -u %s", serviceName)
-	if err := cmd.Run(); err != nil {
-		errMsg := fmt.Sprintf("journalctl failed for service %s: %v", serviceName, err)
-		writer.WriteStatus("error", errMsg)
-		log.Printf("DEBUG: %s", errMsg)
-		return fmt.Errorf("%w", err)
-	}
-	return nil
 }
 
 // CreateDeploymentHandler creates a new deployment by promoting a stage.
