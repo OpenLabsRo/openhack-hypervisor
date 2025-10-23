@@ -46,6 +46,8 @@ func main() {
 		err = commands.RunSwaddle(args)
 	case "grimhilde":
 		err = commands.RunGrimhilde(args)
+	case "knox":
+		err = commands.RunKnox(args)
 	default:
 		fmt.Fprintf(os.Stderr, "hyperctl: unknown command %q\n", cmd)
 		commands.PrintUsage()

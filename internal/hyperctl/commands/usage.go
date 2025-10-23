@@ -15,6 +15,7 @@ func PrintUsage() {
 	fmt.Println("  trinity    Update hypervisor by cloning, testing, and building new version")
 	fmt.Println("  swaddle    Generate nginx configuration for the hypervisor")
 	fmt.Println("  grimhilde  Update hyperctl to the latest version")
+	fmt.Println("  knox       Secure nginx with SSL certificate using certbot")
 	fmt.Println("  version    Show the currently installed hypervisor build")
 	fmt.Println("  help       Show this help text")
 }
