@@ -295,10 +295,15 @@ func StreamDeploymentLogs(c fiber.Ctx) error {
 }
 
 func streamJournalctl(ctx context.Context, deploymentID string, writer *ws.WebsocketLogWriter) error {
-	cmd := exec.CommandContext(ctx, "journalctl", "-u", systemd.ServiceName(deploymentID), "-f", "-n", "100")
+	serviceName := systemd.ServiceName(deploymentID)
+	cmd := exec.CommandContext(ctx, "journalctl", "-u", serviceName, "-f", "-n", "100")
 	cmd.Stdout = writer
 	cmd.Stderr = writer
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		writer.WriteStatus("error", fmt.Sprintf("journalctl failed for service %s: %v", serviceName, err))
+		return fmt.Errorf("journalctl -u %s failed: %w", serviceName, err)
+	}
+	return nil
 }
 
 // CreateDeploymentHandler creates a new deployment by promoting a stage.

@@ -4,4 +4,4 @@ ROUTE="ws://$1/hypervisor/ws/stages/$2/tests/$3"
 echo $ROUTE
 
 wscat --connect $ROUTE \
-     --header "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjEwODA2ODQsInBhc3N3b3JkIjoiJDJhJDEyJC9EbHVwOVVpVUwwano5cnpHNWl3Y08vVnVnLzF0Q2pXWFdxZGN0dmVpem1CcFNONXlUVUY2IiwidXNlcm5hbWUiOiJzdW5zaGluZSJ9.C0cP08xgcQoz3AisEbFkipSxY45agw0-ZzlCxMwcdN4"
+     --header "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjEzMzI5MTksInBhc3N3b3JkIjoiJDJhJDEyJC9EbHVwOVVpVUwwano5cnpHNWl3Y08vVnVnLzF0Q2pXWFdxZGN0dmVpem1CcFNONXlUVUY2IiwidXNlcm5hbWUiOiJzdW5zaGluZSJ9.LieFewkXennD15BFE--99RUSVMoytEdiqG55Qqb_bl8"
