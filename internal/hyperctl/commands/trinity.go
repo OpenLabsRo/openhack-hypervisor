@@ -372,7 +372,7 @@ func updateServiceBinary(serviceName, deployment string) error {
 
 	// Write back the updated service file
 	updatedContent := strings.Join(lines, "\n")
-	if err := writeFileWithSudo(serviceFile, []byte(updatedContent)); err != nil {
+	if err := fsops.WriteFileWithSudo(serviceFile, []byte(updatedContent), 0o644); err != nil {
 		return fmt.Errorf("failed to write updated service file: %w", err)
 	}
 
@@ -411,33 +411,6 @@ func verifyServiceHealth(serviceName string) error {
 		return fmt.Errorf("service not active: %s", status)
 	}
 	return nil
-}
-
-func writeFileWithSudo(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	cmd := exec.Command("sudo", "tee", path)
-	cmd.Stdin = bytes.NewReader(data)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sudo tee %s failed: %w", path, err)
-	}
-
-	if err := runCommand("sudo", "chmod", "0644", path); err != nil {
-		return fmt.Errorf("sudo chmod %s failed: %w", path, err)
-	}
-
-	return nil
-}
-
-func runCommand(cmd string, args ...string) error {
-	command := exec.Command(cmd, args...)
-	command.Stdout = os.Stdout
-	command.Stderr = os.Stderr
-	return command.Run()
 }
 
 func runTrinityDev() error {

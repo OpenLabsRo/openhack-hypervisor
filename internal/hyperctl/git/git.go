@@ -3,6 +3,8 @@ package git
 import (
 	"fmt"
 	"os/exec"
+
+	"hypervisor/internal/hyperctl/user"
 )
 
 // CloneOrPull clones the repository if it doesn't exist, or pulls if it does.
@@ -14,6 +16,12 @@ func CloneOrPull(repoURL, destDir string) error {
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git clone failed: %v: %s", err, string(out))
 		}
+
+		// Chown the cloned repository to openhack user
+		if err := user.ChownToOpenhack(destDir); err != nil {
+			return fmt.Errorf("failed to chown cloned repo: %w", err)
+		}
+
 		return nil
 	} else {
 		_ = out // repo exists
@@ -25,6 +33,12 @@ func CloneOrPull(repoURL, destDir string) error {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git pull failed: %v: %s", err, string(out))
 	}
+
+	// Ensure ownership is correct after pull
+	if err := user.ChownToOpenhack(destDir); err != nil {
+		return fmt.Errorf("failed to chown repo after pull: %w", err)
+	}
+
 	return nil
 }
 

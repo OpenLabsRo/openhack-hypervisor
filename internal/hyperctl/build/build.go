@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	userutil "hypervisor/internal/hyperctl/user"
 )
 
 // Result captures output details from running the BUILD script.
@@ -52,6 +54,16 @@ func Run(repoDir, outputDir string) (Result, error) {
 
 	if _, err := os.Stat(binaryPath); err != nil {
 		return Result{}, fmt.Errorf("expected build artifact not found: %w", err)
+	}
+
+	// Change ownership of the binary to openhack user
+	if err := userutil.ChownToOpenhack(binaryPath); err != nil {
+		return Result{}, fmt.Errorf("failed to chown binary to openhack: %w", err)
+	}
+
+	// Set binary permissions to 0755 (rwxr-xr-x)
+	if err := userutil.ChmodPath(binaryPath, "0755"); err != nil {
+		return Result{}, fmt.Errorf("failed to chmod binary: %w", err)
 	}
 
 	return Result{

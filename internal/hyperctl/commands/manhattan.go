@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 
 	"hypervisor/internal/hyperctl/build"
@@ -16,6 +15,7 @@ import (
 	"hypervisor/internal/hyperctl/state"
 	"hypervisor/internal/hyperctl/system"
 	"hypervisor/internal/hyperctl/systemd"
+	userutil "hypervisor/internal/hyperctl/user"
 	"hypervisor/internal/paths"
 )
 
@@ -37,12 +37,38 @@ func RunManhattan(args []string) error {
 
 	fmt.Println("Starting hypervisor setup...")
 
+	// Verify openhack user and group exist (created by install script)
+	fmt.Println("Verifying openhack user and group...")
+	if !userutil.UserExists(userutil.OpenhackUser) {
+		return fmt.Errorf("openhack user not found - run hyperctl_install.sh first to set up the openhack user and group")
+	}
+	if !userutil.GroupExists(userutil.OpenhackAdminGroup) {
+		return fmt.Errorf("openhack-admins group not found - run hyperctl_install.sh first to set up the openhack user and group")
+	}
+	fmt.Println("openhack user and group verified")
+
+	// Check if calling user is in openhack-admins group
+	adminUser, err := userutil.GetAdminUser()
+	if err != nil {
+		return fmt.Errorf("failed to determine admin user: %w", err)
+	}
+	if adminUser != userutil.OpenhackUser && adminUser != "root" {
+		inGroup, err := userutil.IsInGroup(adminUser, userutil.OpenhackAdminGroup)
+		if err != nil {
+			fmt.Printf("Warning: could not verify %s is in %s group: %v\n", adminUser, userutil.OpenhackAdminGroup, err)
+			fmt.Printf("Tip: Run 'newgrp %s' in current shell or log out and back in\n", userutil.OpenhackAdminGroup)
+		} else if !inGroup {
+			fmt.Printf("Warning: %s is not in %s group\n", adminUser, userutil.OpenhackAdminGroup)
+			fmt.Printf("Tip: Run hyperctl_install.sh again to add %s to the group, then log out and back in\n", adminUser)
+		}
+	}
+
 	// Verify system requirements
 	if err := system.CheckPrerequisites(); err != nil {
 		return err
 	}
 
-	// Create necessary directories
+	// Create necessary directories (ensures proper ownership/permissions)
 	fmt.Println("Ensuring directory layout...")
 	if err := fsops.EnsureLayout(); err != nil {
 		return err
@@ -117,8 +143,6 @@ func RunManhattan(args []string) error {
 	}
 	fmt.Println("API_SPEC executed successfully")
 
-	// Tests removed
-
 	// Build the application
 	fmt.Printf("Building the code into %s...\n", paths.HypervisorBuildsDir)
 	buildResult, err := build.Run(repoDir, paths.HypervisorBuildsDir)
@@ -181,13 +205,6 @@ func RunManhattan(args []string) error {
 	}
 	fmt.Println("Services are active (blue on 8080, green on 8081)")
 
-	// Configure sudoers for passwordless commands
-	fmt.Println("Configuring sudoers for passwordless commands...")
-	if err := configureSudoers(); err != nil {
-		return fmt.Errorf("failed to configure sudoers: %w", err)
-	}
-	fmt.Println("Sudoers configured")
-
 	// Final health verification
 	fmt.Println("Performing health check...")
 	if err := health.CheckHost("localhost:8080"); err != nil {
@@ -206,27 +223,4 @@ func RunManhattan(args []string) error {
 func copyFile(src, dest string) error {
 	cmd := exec.Command("sudo", "cp", src, dest)
 	return cmd.Run()
-}
-
-// configureSudoers adds a sudoers file for passwordless commands.
-func configureSudoers() error {
-	sudoUser := os.Getenv("SUDO_USER")
-	if sudoUser == "" {
-		// Fallback to current user if not run with sudo
-		if u, err := user.Current(); err == nil {
-			sudoUser = u.Username
-		} else {
-			return fmt.Errorf("unable to determine user")
-		}
-	}
-
-	content := fmt.Sprintf(`%s ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/tee, /usr/bin/chmod, /usr/bin/rm
-`, sudoUser)
-
-	sudoersFile := "/etc/sudoers.d/hypervisor"
-	if err := fsops.WriteFileWithSudo(sudoersFile, []byte(content), 0o440); err != nil {
-		return fmt.Errorf("failed to write sudoers file: %w", err)
-	}
-
-	return nil
 }
