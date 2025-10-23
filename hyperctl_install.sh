@@ -116,6 +116,12 @@ install_go_toolchain() {
   rm -rf "$GO_TMP_DIR"
 
   printf "Go %s installed to /usr/local/go.\n" "$REQUIRED_GO_VERSION"
+
+  # Symlink go binary to /usr/local/bin for direct PATH access
+  printf "Creating symlink: /usr/local/bin/go -> /usr/local/go/bin/go\n"
+  run_privileged ln -sf /usr/local/go/bin/go /usr/local/bin/go
+  run_privileged ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+  printf "Go binaries symlinked to /usr/local/bin\n"
 }
 
 install_swag_cli() {
@@ -252,7 +258,6 @@ install_dependencies_debian() {
   run_privileged apt-get install -y curl redis-server nginx python3-certbot-nginx vim git
 
   install_go_toolchain
-  append_path_entry "/usr/local/go/bin"
 
   if command -v go >/dev/null 2>&1; then
     printf "Go ready: %s\n" "$(go version)"
@@ -273,7 +278,6 @@ install_dependencies_fedora() {
   run_privileged dnf install -y curl redis nginx certbot python3-certbot-nginx vim git
 
   install_go_toolchain
-  append_path_entry "/usr/local/go/bin"
 
   if command -v go >/dev/null 2>&1; then
     printf "Go ready: %s\n" "$(go version)"

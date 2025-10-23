@@ -76,6 +76,7 @@ printf 'Building OpenHack hypervisor %s (%s/%s) -> %s\n' "${VERSION}" "${GOOS}" 
 go build \
 	-trimpath \
 	-ldflags "-s -w" \
+	-buildvcs=false \
 	-o "${ARTIFACT_PATH}" \
 	./cmd/server
 
