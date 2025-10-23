@@ -8,35 +8,44 @@ import (
 )
 
 // CloneOrPull clones the repository if it doesn't exist, or pulls if it does.
+// If the directory exists but is not a valid git repo, it removes and re-clones.
 func CloneOrPull(repoURL, destDir string) error {
-	// Check if destDir is a git repo
-	if out, err := exec.Command("git", "-C", destDir, "rev-parse", "--git-dir").CombinedOutput(); err != nil {
-		// Not a git repo or doesn't exist, clone into destDir
-		cmd := exec.Command("git", "clone", repoURL, destDir)
+	// Check if destDir is a valid git repo
+	if _, err := exec.Command("git", "-C", destDir, "rev-parse", "--git-dir").CombinedOutput(); err == nil {
+		// Is a valid git repo, pull latest
+		cmd := exec.Command("git", "pull")
+		cmd.Dir = destDir
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("git clone failed: %v: %s", err, string(out))
+			return fmt.Errorf("git pull failed: %v: %s", err, string(out))
 		}
 
-		// Chown the cloned repository to openhack user
+		// Ensure ownership is correct after pull
 		if err := user.ChownToOpenhack(destDir); err != nil {
-			return fmt.Errorf("failed to chown cloned repo: %w", err)
+			return fmt.Errorf("failed to chown repo after pull: %w", err)
 		}
 
 		return nil
-	} else {
-		_ = out // repo exists
 	}
 
-	// Is a git repo, pull latest
-	cmd := exec.Command("git", "pull")
-	cmd.Dir = destDir
+	// Not a valid git repo - either doesn't exist or is corrupted
+	// Remove the directory if it exists (to handle partial/corrupted clones)
+	if _, err := exec.Command("test", "-d", destDir).CombinedOutput(); err == nil {
+		// Directory exists but is not a valid git repo, remove it
+		cmd := exec.Command("rm", "-rf", destDir)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to remove corrupted repo directory %s: %w", destDir, err)
+		}
+	}
+
+	// Clone the repository
+	cmd := exec.Command("git", "clone", repoURL, destDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git pull failed: %v: %s", err, string(out))
+		return fmt.Errorf("git clone failed: %v: %s", err, string(out))
 	}
 
-	// Ensure ownership is correct after pull
+	// Chown the cloned repository to openhack user
 	if err := user.ChownToOpenhack(destDir); err != nil {
-		return fmt.Errorf("failed to chown repo after pull: %w", err)
+		return fmt.Errorf("failed to chown cloned repo: %w", err)
 	}
 
 	return nil

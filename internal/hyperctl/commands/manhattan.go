@@ -135,9 +135,18 @@ func RunManhattan(args []string) error {
 		fmt.Printf("Project cloned to %s\n", repoDir)
 	}
 
+	// Ensure swagger docs directory exists before running API_SPEC
+	swaggerDocsDir := filepath.Join(repoDir, "internal/swagger/docs")
+	if err := os.MkdirAll(swaggerDocsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create swagger docs directory: %w", err)
+	}
+	fmt.Printf("Swagger docs directory ensured at %s\n", swaggerDocsDir)
+
 	// Run API_SPEC
 	cmd := exec.Command("./API_SPEC")
 	cmd.Dir = repoDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run API_SPEC: %w", err)
 	}
