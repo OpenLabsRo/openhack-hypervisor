@@ -269,23 +269,32 @@ func DeleteDeploymentHandler(c fiber.Ctx) error {
 // @Router /hypervisor/ws/deployments/{deploymentId}/logs [get]
 func StreamDeploymentLogs(c fiber.Ctx) error {
 	deploymentID := c.Params("deploymentId")
+	log.Printf("DEBUG: StreamDeploymentLogs called for deploymentID=%s", deploymentID)
 
 	if deploymentID == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "missing deployment identifier")
 	}
 
 	return ws.StreamWebSocket(c, func(ctx context.Context, writer *ws.WebsocketLogWriter) error {
+		log.Printf("DEBUG: WebSocket connected for deploymentID=%s", deploymentID)
+
 		dep, err := models.GetDeploymentByID(ctx, deploymentID)
 		if err != nil {
-			writer.WriteStatus("error", fmt.Sprintf("deployment not found: %v", err))
+			errMsg := fmt.Sprintf("deployment not found: %v", err)
+			log.Printf("DEBUG: %s", errMsg)
+			writer.WriteStatus("error", errMsg)
 			return err
 		}
 
+		log.Printf("DEBUG: Deployment found with status=%s", dep.Status)
+
 		if dep.Status == models.DeploymentStatusReady {
 			// Stream runtime logs from journalctl
+			log.Printf("DEBUG: Deployment is ready, streaming from journalctl")
 			return streamJournalctl(ctx, deploymentID, writer)
 		} else {
 			// Stream provisioning logs from file
+			log.Printf("DEBUG: Deployment not ready, streaming from file logPath=%s", dep.LogPath)
 			if dep.LogPath == "" {
 				writer.WriteStatus("error", "log path is not available for this deployment")
 				return errors.New("log path not available")

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -336,14 +337,20 @@ func updateServiceBinary(serviceName, deployment string) error {
 
 	var latestBinary string
 	var latestVersion string
+	var latestVersionParts []int
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 		// Binary files are named with just the version (e.g., "25.10.20.3")
 		version := entry.Name()
-		if latestVersion == "" || version > latestVersion {
+
+		// Parse version string for semantic comparison
+		versionParts := parseVersion(version)
+
+		if latestVersion == "" || isVersionGreater(versionParts, latestVersionParts) {
 			latestVersion = version
+			latestVersionParts = versionParts
 			latestBinary = filepath.Join(buildsDir, entry.Name())
 		}
 	}
@@ -396,6 +403,53 @@ func getServicePort(serviceName string) string {
 	default:
 		return "8080"
 	}
+}
+
+// parseVersion converts a version string like "25.10.20.3" into a slice of integers
+func parseVersion(version string) []int {
+	// Remove leading 'v' if present
+	version = strings.TrimPrefix(version, "v")
+
+	parts := strings.Split(version, ".")
+	result := make([]int, len(parts))
+	for i, part := range parts {
+		num, err := strconv.Atoi(part)
+		if err != nil {
+			num = 0
+		}
+		result[i] = num
+	}
+	return result
+}
+
+// isVersionGreater compares two version slices semantically
+// Returns true if new is greater than current
+func isVersionGreater(new, current []int) bool {
+	maxLen := len(new)
+	if len(current) > maxLen {
+		maxLen = len(current)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		newVal := 0
+		if i < len(new) {
+			newVal = new[i]
+		}
+
+		currentVal := 0
+		if i < len(current) {
+			currentVal = current[i]
+		}
+
+		if newVal > currentVal {
+			return true
+		}
+		if newVal < currentVal {
+			return false
+		}
+	}
+
+	return false
 }
 
 func verifyServiceHealth(serviceName string) error {
