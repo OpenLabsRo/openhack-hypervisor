@@ -12,7 +12,6 @@ import (
 	fsops "hypervisor/internal/hyperctl/fs"
 	"hypervisor/internal/hyperctl/git"
 	"hypervisor/internal/hyperctl/health"
-	"hypervisor/internal/hyperctl/state"
 	"hypervisor/internal/hyperctl/system"
 	"hypervisor/internal/hyperctl/systemd"
 	userutil "hypervisor/internal/hyperctl/user"
@@ -193,16 +192,6 @@ func RunManhattan(args []string) error {
 	}
 
 	fmt.Println("Systemd units installed (blue on 8080, green on 8081)")
-
-	// Persist installation state
-	fmt.Println("Persisting installation state...")
-	if err := state.Save(state.State{
-		Version:   buildResult.Version,
-		BuildPath: buildResult.BinaryPath,
-	}); err != nil {
-		return err
-	}
-	fmt.Println("State saved")
 
 	// Final health verification
 	fmt.Println("Checking service status...")

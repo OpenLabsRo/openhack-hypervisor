@@ -185,6 +185,15 @@ setup_openhack_user_and_group() {
       printf "Note: You may need to log out and log back in for group membership to take effect.\n"
     fi
   fi
+
+  # Add openhack user to systemd-journal group so it can read service logs
+  if id -Gn "$OPENHACK_USER" | grep -q "systemd-journal"; then
+    printf "openhack user is already in systemd-journal group\n"
+  else
+    printf "Adding openhack user to systemd-journal group for log access...\n"
+    run_privileged usermod -a -G systemd-journal "$OPENHACK_USER"
+    printf "openhack user added to systemd-journal group\n"
+  fi
 }
 
 setup_directories() {

@@ -18,9 +18,8 @@ import (
 	fsops "hypervisor/internal/hyperctl/fs"
 	"hypervisor/internal/hyperctl/git"
 	"hypervisor/internal/hyperctl/health"
-	"hypervisor/internal/hyperctl/state"
 	"hypervisor/internal/hyperctl/system"
-	"hypervisor/internal/hyperctl/testing"
+	testingsvc "hypervisor/internal/hyperctl/testing"
 	"hypervisor/internal/paths"
 )
 
@@ -42,7 +41,7 @@ func RunTrinity(args []string) error {
 		return runTrinitySearch()
 	case "apply":
 		if len(args) == 0 {
-			return fmt.Errorf("apply subcommand requires a version argument")
+			return fmt.Errorf("apply subcommand requires a version argument (or 'latest')")
 		}
 		version = args[0]
 		dev = false
@@ -170,12 +169,12 @@ func buildAndTestNewVersion(version string, dev bool) error {
 	latestVersion := strings.TrimSpace(string(mainVersionData))
 
 	// Determine target version
-	if version != "" {
-		targetVersion = version
-		fmt.Printf("Using specified version: %s\n", targetVersion)
-	} else {
+	if version == "" || version == "latest" {
 		targetVersion = latestVersion
 		fmt.Printf("Using latest version from main repo: %s\n", targetVersion)
+	} else {
+		targetVersion = version
+		fmt.Printf("Using specified version: %s\n", targetVersion)
 	}
 
 	// Clone the specific version to versioned directory from remote
@@ -209,7 +208,7 @@ func buildAndTestNewVersion(version string, dev bool) error {
 
 	// Run test suite
 	fmt.Println("Testing the code...")
-	if err := testing.RunTests(versionedRepoDir); err != nil {
+	if err := testingsvc.RunTests(versionedRepoDir); err != nil {
 		return fmt.Errorf("tests failed: %w", err)
 	}
 
@@ -484,16 +483,19 @@ func runTrinitySearch() error {
 	latestVersion := strings.TrimSpace(string(versionData))
 	fmt.Printf("Latest version in main repo: %s\n", latestVersion)
 
-	// Get currently installed hypervisor version
-	installedVersion, err := state.CurrentVersion()
-	if err != nil {
-		if err == state.ErrStateNotInitialized {
-			fmt.Println("Currently installed hypervisor version: none (run `hyperctl setup` first)")
-		} else {
-			fmt.Printf("Error getting installed version: %v\n", err)
-		}
+	// Get currently installed hypervisor version by querying the API
+	resp, err := http.Get("http://localhost:8080/hypervisor/meta/version")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		fmt.Println("Currently installed hypervisor version: none (hypervisor not running or unreachable)")
 	} else {
-		fmt.Printf("Currently installed hypervisor version: %s\n", installedVersion)
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		installedVersion := strings.TrimSpace(string(body))
+		if installedVersion != "" {
+			fmt.Printf("Currently installed hypervisor version: %s\n", installedVersion)
+		} else {
+			fmt.Println("Currently installed hypervisor version: none")
+		}
 	}
 
 	// List available tags (versions) from remote using git ls-remote
