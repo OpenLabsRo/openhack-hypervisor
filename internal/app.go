@@ -67,7 +67,7 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	// hypervisor.Get("/releases/webhook", models.HyperUserMiddleware, api.ListReleasesHandler)  for the GitHub webhook integration
 
 	hypervisor.Get("/env/template", models.HyperUserMiddleware, api.GetEnvTemplateHandler)
-	hypervisor.Post("/env/template/validate", models.HyperUserMiddleware, api.UpdateEnvTemplateHandler)
+	hypervisor.Put("/env/template", models.HyperUserMiddleware, api.UpdateEnvTemplateHandler)
 
 	// creating and listing stages
 	hypervisor.Post("/stages", models.HyperUserMiddleware, api.CreateStageHandler)

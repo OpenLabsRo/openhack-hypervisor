@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -177,18 +178,19 @@ func buildAndTestNewVersion(version string, dev bool) error {
 		fmt.Printf("Using latest version from main repo: %s\n", targetVersion)
 	}
 
-	// Clone the specific version to versioned directory at the tag from local main repo
-	fmt.Printf("Cloning version %s...\n", targetVersion)
+	// Clone the specific version to versioned directory from remote
+	// Using remote URL instead of local repo avoids permission/state issues
+	fmt.Printf("Cloning version %s from remote...\n", targetVersion)
 	versionedRepoDir := filepath.Join(paths.HypervisorReposDir, targetVersion)
 
 	// Check if directory already exists
 	if _, err := os.Stat(versionedRepoDir); os.IsNotExist(err) {
-		// Clone directly at the tag from local main repo
+		// Clone directly from remote at the specified tag
 		ref := targetVersion
 		if !strings.HasPrefix(ref, "v") {
-			ref = "v" + ref
+			ref = "v" + targetVersion
 		}
-		cloneCmd := exec.Command("git", "clone", "--branch", ref, mainRepoDir, versionedRepoDir)
+		cloneCmd := exec.Command("git", "clone", "--branch", ref, hypervisorRepoURL, versionedRepoDir)
 		if output, err := cloneCmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git clone --branch failed: %v: %s", err, string(output))
 		}
@@ -494,16 +496,42 @@ func runTrinitySearch() error {
 		fmt.Printf("Currently installed hypervisor version: %s\n", installedVersion)
 	}
 
-	// List available tags (versions)
-	cmd := exec.Command("git", "tag", "--sort=-version:refname")
-	cmd.Dir = mainRepoDir
-	output, err := cmd.Output()
+	// List available tags (versions) from remote using git ls-remote
+	// This doesn't require the local repo to be in a perfect state
+	cmd := exec.Command("git", "ls-remote", "--tags", hypervisorRepoURL)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to list tags: %w", err)
 	}
 
+	// Parse and format output: git ls-remote returns refs like "abc123<tab>refs/tags/v1.0.0"
+	// Extract just the tag names and sort them
+	var tags []string
+	for _, line := range strings.Split(string(output), "\n") {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			ref := parts[1]
+			// Skip the special "^{}" entries (dereferenced tags)
+			if strings.HasSuffix(ref, "^{}") {
+				continue
+			}
+			// Extract tag name from refs/tags/v1.0.0
+			tag := strings.TrimPrefix(ref, "refs/tags/")
+			if tag != ref && tag != "" {
+				tags = append(tags, tag)
+			}
+		}
+	}
+
+	// Sort tags by version (in reverse order, newest first)
+	sort.Slice(tags, func(i, j int) bool {
+		return tags[i] > tags[j]
+	})
+
 	fmt.Println("Available versions (tags):")
-	fmt.Print(string(output))
+	for _, tag := range tags {
+		fmt.Println(tag)
+	}
 	fmt.Println("To deploy a specific version, use: hyperctl trinity apply <version>")
 	fmt.Println("To deploy from current directory, use: hyperctl trinity dev")
 	fmt.Printf("Recommended: use the latest version (%s)\n", latestVersion)

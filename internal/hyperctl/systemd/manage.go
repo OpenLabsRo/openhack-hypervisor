@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 )
 
 // ServiceConfig carries values rendered into the systemd unit template.
@@ -202,7 +203,8 @@ func ReloadSystemd() error {
 	return cmd.Run()
 }
 
-// CheckServiceStatus verifies that the hypervisor service is active.
+// CheckServiceStatus verifies that the hypervisor service is active with retries.
+// Retries for up to 30 seconds to allow the service time to start.
 func CheckServiceStatus(serviceName ...string) error {
 	name := HypervisorServiceName
 	if len(serviceName) > 0 {
@@ -211,14 +213,18 @@ func CheckServiceStatus(serviceName ...string) error {
 		}
 	}
 
-	cmd := exec.Command("systemctl", "is-active", name)
-	output, err := cmd.Output()
-	if err != nil {
-		return err
+	// Retry for up to 30 seconds, checking every 1 second
+	for i := 0; i < 30; i++ {
+		cmd := exec.Command("systemctl", "is-active", name)
+		output, err := cmd.Output()
+		if err == nil {
+			status := strings.TrimSpace(string(output))
+			if status == "active" {
+				return nil
+			}
+		}
+		time.Sleep(1 * time.Second)
 	}
-	status := strings.TrimSpace(string(output))
-	if status != "active" {
-		return fmt.Errorf("service not active: %s", status)
-	}
-	return nil
+
+	return fmt.Errorf("service %s did not become active after 30 seconds", name)
 }
