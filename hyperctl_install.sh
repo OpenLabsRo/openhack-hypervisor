@@ -22,17 +22,18 @@ die() {
 
 usage() {
   cat <<USAGE
-Usage: ./hyperctl_install.sh [--nodeps|-nodeps]
+Usage: ./hyperctl_install.sh [--nodeps|-nodeps|--fedora-deps]
 
-Installs the hyperctl binary (and, by default, its Debian-based prerequisites:
+Installs the hyperctl binary (and, by default, its prerequisites:
 Go 1.25.1, redis-server, nginx, certbot integration, vim, and the swag CLI).
 
 Also creates the openhack system user and openhack-admins group for managing
 hypervisor operations, and adds the invoking user to the admin group.
 
 Options:
-  --nodeps, -nodeps  Skip installing prerequisite packages and toolchains.
-  -h, --help         Show this help text.
+  --nodeps, -nodeps      Skip installing prerequisite packages and toolchains.
+  --fedora-deps          Install prerequisites for Fedora/RHEL-based systems (uses dnf).
+  -h, --help             Show this help text.
 USAGE
 }
 
@@ -125,18 +126,13 @@ install_swag_cli() {
 
   command -v go >/dev/null 2>&1 || die "Go command not available; cannot install swag CLI."
 
-  printf "Installing swag CLI via go install...\n"
-  go install github.com/swaggo/swag/cmd/swag@latest
-
-  GOPATH_BIN="$(go env GOPATH 2>/dev/null)/bin"
-  if [ -n "$GOPATH_BIN" ] && [ -d "$GOPATH_BIN" ]; then
-    append_path_entry "$GOPATH_BIN"
-  fi
+  printf "Installing swag CLI via go install to /usr/local/bin...\n"
+  GOBIN=/usr/local/bin go install github.com/swaggo/swag/cmd/swag@latest
 
   if command -v swag >/dev/null 2>&1; then
-    printf "swag CLI installed successfully.\n"
+    printf "swag CLI installed successfully to /usr/local/bin\n"
   else
-    printf "Warning: swag CLI installed but not found on PATH. Ensure %s is on PATH.\n" "$GOPATH_BIN"
+    printf "Warning: swag CLI installation may have failed. Check /usr/local/bin/swag\n"
   fi
 }
 
@@ -245,8 +241,8 @@ setup_sudoers() {
   printf "Sudoers file configured at %s\n" "$OPENHACK_SUDOERS_FILE"
 }
 
-install_dependencies() {
-  printf "Installing hyperctl prerequisites for Debian-based systems...\n"
+install_dependencies_debian() {
+  printf "Installing hyperctl prerequisites for Debian-based systems (apt)...\n"
 
   if ! command -v apt-get >/dev/null 2>&1; then
     die "apt-get is required to install dependencies automatically. Use --nodeps to skip."
@@ -267,12 +263,39 @@ install_dependencies() {
   install_swag_cli
 }
 
+install_dependencies_fedora() {
+  printf "Installing hyperctl prerequisites for Fedora/RHEL-based systems (dnf)...\n"
+
+  if ! command -v dnf >/dev/null 2>&1; then
+    die "dnf is required to install dependencies automatically. Use --nodeps to skip."
+  fi
+
+  run_privileged dnf install -y curl redis nginx certbot python3-certbot-nginx vim git
+
+  install_go_toolchain
+  append_path_entry "/usr/local/go/bin"
+
+  if command -v go >/dev/null 2>&1; then
+    printf "Go ready: %s\n" "$(go version)"
+  else
+    die "Go installation failed or go not on PATH."
+  fi
+
+  install_swag_cli
+}
+
 INSTALL_DEPS=1
+INSTALL_DEPS_TYPE="debian"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --nodeps|-nodeps)
       INSTALL_DEPS=0
+      shift
+      ;;
+    --fedora-deps)
+      INSTALL_DEPS=1
+      INSTALL_DEPS_TYPE="fedora"
       shift
       ;;
     --help|-h)
@@ -286,7 +309,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$INSTALL_DEPS" -eq 1 ]; then
-  install_dependencies
+  if [ "$INSTALL_DEPS_TYPE" = "fedora" ]; then
+    install_dependencies_fedora
+  else
+    install_dependencies_debian
+  fi
 else
   printf "Skipping dependency installation (--nodeps).\n"
 fi
