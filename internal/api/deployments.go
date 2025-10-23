@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -296,12 +297,26 @@ func StreamDeploymentLogs(c fiber.Ctx) error {
 
 func streamJournalctl(ctx context.Context, deploymentID string, writer *ws.WebsocketLogWriter) error {
 	serviceName := systemd.ServiceName(deploymentID)
+
+	// Check if service exists first
+	checkCmd := exec.Command("systemctl", "is-active", serviceName)
+	if err := checkCmd.Run(); err != nil {
+		errMsg := fmt.Sprintf("service %s is not active or does not exist", serviceName)
+		writer.WriteStatus("error", errMsg)
+		log.Printf("DEBUG: %s", errMsg)
+		return fmt.Errorf("%s", errMsg)
+	}
+
 	cmd := exec.CommandContext(ctx, "journalctl", "-u", serviceName, "-f", "-n", "100")
 	cmd.Stdout = writer
 	cmd.Stderr = writer
+
+	log.Printf("DEBUG: Running journalctl -u %s", serviceName)
 	if err := cmd.Run(); err != nil {
-		writer.WriteStatus("error", fmt.Sprintf("journalctl failed for service %s: %v", serviceName, err))
-		return fmt.Errorf("journalctl -u %s failed: %w", serviceName, err)
+		errMsg := fmt.Sprintf("journalctl failed for service %s: %v", serviceName, err)
+		writer.WriteStatus("error", errMsg)
+		log.Printf("DEBUG: %s", errMsg)
+		return fmt.Errorf("%w", err)
 	}
 	return nil
 }
