@@ -109,6 +109,8 @@ func runSudo(args ...string) error {
 }
 
 // WriteFileWithSudo writes a file using sudo if necessary.
+// Note: sudo tee creates files with mode 0644 by default (assuming umask 0022),
+// which is the correct permission for systemd unit files, so chmod is not needed.
 func WriteFileWithSudo(path string, data []byte, perm os.FileMode) error {
 	// Try writing directly first
 	if err := os.WriteFile(path, data, perm); err != nil {
@@ -124,11 +126,6 @@ func WriteFileWithSudo(path string, data []byte, perm os.FileMode) error {
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("sudo tee %s failed: %w", path, err)
 		}
-	}
-
-	// Set correct permissions
-	if err := userutil.ChmodPath(path, fmt.Sprintf("%04o", perm)); err != nil {
-		return fmt.Errorf("failed to chmod %s: %w", path, err)
 	}
 
 	return nil

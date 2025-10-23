@@ -8,6 +8,12 @@ import (
 )
 
 func main() {
+	// Ensure hyperctl is always run with sudo
+	if os.Geteuid() != 0 {
+		fmt.Fprintf(os.Stderr, "hyperctl: this command must be run with sudo\n")
+		os.Exit(1)
+	}
+
 	if len(os.Args) < 2 {
 		commands.PrintUsage()
 		os.Exit(1)

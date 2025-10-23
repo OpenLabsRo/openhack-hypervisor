@@ -38,8 +38,9 @@ func RemoveAll(path string) error {
 }
 
 // WriteFileWithSudo writes a file using sudo if necessary.
+// sudo tee creates files with mode 0644 by default, which is the desired permission.
 func WriteFileWithSudo(path string, data []byte, perm os.FileMode) error {
-	// Always use sudo for systemd files to avoid permission issues
+	// Use sudo tee to write systemd files
 	cmd := exec.Command("sudo", "tee", path)
 	cmd.Stdin = bytes.NewReader(data)
 	cmd.Stdout = io.Discard
@@ -48,16 +49,5 @@ func WriteFileWithSudo(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("sudo tee %s failed: %w", path, err)
 	}
 
-	if err := runCommand("sudo", "chmod", fmt.Sprintf("%04o", perm), path); err != nil {
-		return fmt.Errorf("sudo chmod %s failed: %w", path, err)
-	}
-
 	return nil
-}
-
-func runCommand(cmd string, args ...string) error {
-	command := exec.Command(cmd, args...)
-	command.Stdout = os.Stdout
-	command.Stderr = os.Stderr
-	return command.Run()
 }
