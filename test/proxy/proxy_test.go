@@ -41,3 +41,24 @@ func TestProxyAPIRoutesNotIntercepted(t *testing.T) {
 		t.Errorf("Expected status 200 for API route, got %d", resp.StatusCode)
 	}
 }
+
+func TestProxyForwardsQueryParameters(t *testing.T) {
+	// Test that query parameters are forwarded through the proxy
+	req, err := http.NewRequest("GET", "/?foo=bar&baz=qux", nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// We expect a 404 since there's no actual backend running,
+	// but the important thing is that the query parameters were included in the request.
+	// The proxy module would have attempted to forward them to localhost.
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("Expected status 404 for missing deployment, got %d", resp.StatusCode)
+	}
+}

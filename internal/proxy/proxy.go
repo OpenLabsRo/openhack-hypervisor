@@ -193,6 +193,10 @@ func (rm *RouteMap) SetupRoutes(app *fiber.App) {
 				}
 
 				finalURL := target + remainingPath
+				// Append query string if present
+				if queryString := string(c.Request().URI().QueryString()); queryString != "" {
+					finalURL += "?" + queryString
+				}
 				err := proxy.Do(c, finalURL)
 				if err != nil {
 					// Backend service is unreachable - return our custom error
@@ -206,6 +210,10 @@ func (rm *RouteMap) SetupRoutes(app *fiber.App) {
 		if mainDep, exists := rm.GetMainDeployment(); exists && mainDep.Port != nil {
 			target := fmt.Sprintf("http://localhost:%d", *mainDep.Port)
 			finalURL := target + path
+			// Append query string if present
+			if queryString := string(c.Request().URI().QueryString()); queryString != "" {
+				finalURL += "?" + queryString
+			}
 			err := proxy.Do(c, finalURL)
 			if err != nil {
 				// Backend service is unreachable - return our custom error
