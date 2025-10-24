@@ -15,10 +15,16 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
 )
 
 func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 	app := fiber.New()
+
+	// Enable CORS for all origins
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+	}))
 
 	env.Init(envRoot, appVersion)
 
