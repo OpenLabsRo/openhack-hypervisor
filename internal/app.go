@@ -113,7 +113,7 @@ func SetupApp(deployment string, envRoot string, appVersion string) *fiber.App {
 
 	// websockets for streaming test logs and deployment logs
 	ws := hypervisor.Group("/ws")
-	ws.Use(models.HyperUserMiddleware)
+	ws.Use(models.HyperUserWebSocketMiddleware)
 	ws.Get("/stages/:stageId/tests/:sequence", api.StreamTestLogs)
 	ws.Get("/deployments/:deploymentId/logs", api.StreamDeploymentLogs)
 
