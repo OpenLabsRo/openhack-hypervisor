@@ -216,7 +216,7 @@ func DeleteDeploymentHandler(c fiber.Ctx) error {
 		return utils.StatusError(c, errmsg.CannotDeleteMainDeployment)
 	}
 
-	if force && dep.Status == models.DeploymentStatusReady {
+	if dep.Status == models.DeploymentStatusReady {
 		if err := systemd.StopBackendService(deploymentID); err != nil {
 			return utils.StatusError(c, err)
 		}
