@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjE0ODI1OTksInBhc3N3b3JkIjoiJDJhJDEyJC9EbHVwOVVpVUwwano5cnpHNWl3Y08vVnVnLzF0Q2pXWFdxZGN0dmVpem1CcFNONXlUVUY2IiwidXNlcm5hbWUiOiJzdW5zaGluZSJ9.rksbqzdvcv9LDmiC2VvgylMu9y65u_AaJ83XICJo6MA"
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjE0ODQyNDUsInBhc3N3b3JkIjoiJDJhJDEyJC9EbHVwOVVpVUwwano5cnpHNWl3Y08vVnVnLzF0Q2pXWFdxZGN0dmVpem1CcFNONXlUVUY2IiwidXNlcm5hbWUiOiJzdW5zaGluZSJ9.oolxP1SjuKPHJrPeTduTh-XLJqbDpW9sW1sj7KAVneg"
 ROUTE="ws://$1/hypervisor/ws/deployments/$2/logs?authorization=${TOKEN}"
 echo $ROUTE
 
