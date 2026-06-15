@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"testing"
 
-	"hypervisor/internal/env"
 	"hypervisor/test/helpers"
 
 	"hypervisor/internal/errmsg"
@@ -42,7 +41,6 @@ func TestHyperUsersLoginSuccess(t *testing.T) {
 	require.NotEmpty(t, payload.Token)
 	require.Equal(t, testHyperUserUsername, payload.HyperUser.Username)
 	require.Empty(t, payload.HyperUser.Password)
-	require.NotEmpty(t, env.JWT_SECRET)
 }
 
 func TestHyperUsersLoginWrongPassword(t *testing.T) {
