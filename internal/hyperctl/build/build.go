@@ -34,7 +34,7 @@ func Run(repoDir, outputDir string) (Result, error) {
 		return Result{}, fmt.Errorf("failed to remove existing binary: %w", err)
 	}
 
-	buildScript := filepath.Join(repoDir, "BUILD")
+	buildScript := filepath.Join(repoDir, "BUILD.sh")
 	if _, err := os.Stat(buildScript); err != nil {
 		return Result{}, fmt.Errorf("BUILD script not found: %w", err)
 	}

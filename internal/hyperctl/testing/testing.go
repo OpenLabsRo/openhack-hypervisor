@@ -21,7 +21,7 @@ func RunTests(repoDir string) error {
 }
 
 func runTestScript(repoDir string) error {
-	cmd := exec.Command("./TEST", "--env-root", paths.HypervisorEnvDir)
+	cmd := exec.Command("./TEST.sh", "--env-root", paths.HypervisorEnvDir)
 	cmd.Dir = repoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

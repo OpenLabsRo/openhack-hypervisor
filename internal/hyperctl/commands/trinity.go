@@ -128,7 +128,7 @@ func buildAndTestNewVersion(version string, dev bool) error {
 		repoDir := "."
 
 		// Run API_SPEC
-		cmd := exec.Command("./API_SPEC")
+		cmd := exec.Command("./API_SPEC.sh")
 		cmd.Dir = repoDir
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to run API_SPEC: %w", err)
@@ -200,7 +200,7 @@ func buildAndTestNewVersion(version string, dev bool) error {
 	}
 
 	// Run API_SPEC
-	cmd := exec.Command("./API_SPEC")
+	cmd := exec.Command("./API_SPEC.sh")
 	cmd.Dir = versionedRepoDir
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run API_SPEC: %w", err)

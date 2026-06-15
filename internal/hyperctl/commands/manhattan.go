@@ -142,7 +142,7 @@ func RunManhattan(args []string) error {
 	fmt.Printf("Swagger docs directory ensured at %s\n", swaggerDocsDir)
 
 	// Run API_SPEC
-	cmd := exec.Command("./API_SPEC")
+	cmd := exec.Command("./API_SPEC.sh")
 	cmd.Dir = repoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -136,7 +136,7 @@ func buildBackend(repoPath, buildPath, binaryPath string, logWriter io.Writer) e
 	}
 
 	fmt.Fprintf(logWriter, "[%s] Running ./BUILD command in %s with output %s\n", time.Now().Format("2006-01-02 15:04:05"), repoPath, buildPath)
-	cmd := exec.Command("./BUILD", "--output", buildPath)
+	cmd := exec.Command("./BUILD.sh", "--output", buildPath)
 	cmd.Dir = repoPath
 	cmd.Stdout = logWriter
 	cmd.Stderr = logWriter

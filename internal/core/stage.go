@@ -59,7 +59,7 @@ func PrepareStage(ctx context.Context, releaseID, envTag string) (*models.Stage,
 		return nil, "", err
 	}
 
-	cmd := exec.Command("./API_SPEC")
+	cmd := exec.Command("./API_SPEC.sh")
 	cmd.Dir = repoPath
 	if err := cmd.Run(); err != nil {
 		log.Printf("failed to run API_SPEC script for stage %s: %v", id, err)

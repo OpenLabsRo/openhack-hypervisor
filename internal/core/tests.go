@@ -117,7 +117,7 @@ func runTest(ctx context.Context, repoPath, stageID string, test models.Test) {
 	}
 
 	testVersion := fmt.Sprintf("%s_test", stageID)
-	cmd := exec.CommandContext(cmdCtx, "./TEST", "--env-root", envRoot, "--app-version", testVersion)
+	cmd := exec.CommandContext(cmdCtx, "./TEST.sh", "--env-root", envRoot, "--app-version", testVersion)
 	cmd.Dir = repoPath
 	cmd.Stdout = writer
 	cmd.Stderr = writer
